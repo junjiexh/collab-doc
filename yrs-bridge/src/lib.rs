@@ -276,24 +276,55 @@ pub extern "C" fn yrs_doc_insert_block(
         txn.state_vector()
     };
 
-    // Perform the mutation
+    // Perform the mutation using BlockNote's expected structure:
+    //   XmlFragment "document-store"
+    //     └── blockGroup
+    //         └── blockContainer [id, backgroundColor, textColor]
+    //             └── <blockType> [textAlignment, ...props]
+    //                 └── XmlText "content"
     {
         let mut txn = doc.doc.transact_mut();
         let fragment = txn.get_or_insert_xml_fragment(FRAGMENT_NAME);
 
-        // Create an XmlElement with the block_type as tag
-        let elem = XmlElementPrelim::empty(&*tag);
-        let elem_ref = fragment.insert(&mut txn, index, elem);
+        // Find or create the blockGroup (first child of fragment)
+        let block_group = if fragment.len(&txn) > 0 {
+            if let Some(yrs::XmlOut::Element(bg)) = fragment.get(&txn, 0) {
+                if bg.tag().as_ref() == "blockGroup" {
+                    bg
+                } else {
+                    fragment.insert(&mut txn, 0, XmlElementPrelim::empty("blockGroup"))
+                }
+            } else {
+                fragment.insert(&mut txn, 0, XmlElementPrelim::empty("blockGroup"))
+            }
+        } else {
+            fragment.insert(&mut txn, 0, XmlElementPrelim::empty("blockGroup"))
+        };
+
+        // Clamp index to blockGroup children count
+        let bg_len = block_group.len(&txn);
+        let safe_index = index.min(bg_len);
+
+        // Create blockContainer with required BlockNote attributes
+        let container = block_group.insert(&mut txn, safe_index, XmlElementPrelim::empty("blockContainer"));
+        let block_id = format!("agent-{:08x}", rand_u32());
+        container.insert_attribute(&mut txn, Arc::<str>::from("id"), block_id);
+        container.insert_attribute(&mut txn, Arc::<str>::from("backgroundColor"), "default".to_string());
+        container.insert_attribute(&mut txn, Arc::<str>::from("textColor"), "default".to_string());
+
+        // Create the content element (paragraph, heading, etc.) inside container
+        let elem_ref = container.insert(&mut txn, 0, XmlElementPrelim::empty(&*tag));
+        elem_ref.insert_attribute(&mut txn, Arc::<str>::from("textAlignment"), "left".to_string());
+
+        // Set additional attributes from props_json
+        for (key, value) in &props {
+            elem_ref.insert_attribute(&mut txn, Arc::<str>::from(key.as_str()), value.clone());
+        }
 
         // Add text content as an XmlText child
         let xml_text = elem_ref.insert(&mut txn, 0, XmlTextPrelim::new(""));
         if !text_content.is_empty() {
             xml_text.insert(&mut txn, 0, &*text_content);
-        }
-
-        // Set attributes from props_json
-        for (key, value) in &props {
-            elem_ref.insert_attribute(&mut txn, Arc::<str>::from(key.as_str()), value.clone());
         }
     }
 
@@ -323,11 +354,33 @@ pub extern "C" fn yrs_doc_delete_block(
         txn.state_vector()
     };
 
-    // Perform the deletion
+    // Perform the deletion (remove blockContainer from blockGroup)
     {
         let mut txn = doc.doc.transact_mut();
         let fragment = txn.get_or_insert_xml_fragment(FRAGMENT_NAME);
-        fragment.remove_range(&mut txn, index, 1);
+
+        // Find the blockGroup
+        let block_group = if fragment.len(&txn) > 0 {
+            if let Some(yrs::XmlOut::Element(bg)) = fragment.get(&txn, 0) {
+                if bg.tag().as_ref() == "blockGroup" {
+                    bg
+                } else {
+                    return ptr::null_mut();
+                }
+            } else {
+                return ptr::null_mut();
+            }
+        } else {
+            return ptr::null_mut();
+        };
+
+        // Validate index against blockGroup children count
+        let bg_len = block_group.len(&txn);
+        if index >= bg_len {
+            return ptr::null_mut();
+        }
+
+        block_group.remove_range(&mut txn, index, 1);
     }
 
     // Encode the diff
@@ -365,6 +418,14 @@ pub extern "C" fn yrs_free_string(ptr: *mut c_char) {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+/// Simple pseudo-random u32 for generating block IDs (no external dep needed).
+fn rand_u32() -> u32 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let t = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+    // Mix nanos and secs for decent uniqueness
+    (t.as_nanos() as u32).wrapping_mul(2654435761)
+}
 
 /// Move a `Vec<u8>` onto the heap and return a raw pointer + length.
 /// The caller is responsible for freeing via `yrs_free_bytes`.
@@ -564,25 +625,29 @@ mod tests {
         );
         assert!(!update2.is_null());
 
-        // Check we have 2 blocks
+        // Check we have blockGroup with 2 blockContainers
         let json = yrs_doc_get_blocks_json(doc);
         let json_str = unsafe { CStr::from_ptr(json) }.to_str().unwrap();
         let parsed: Vec<serde_json::Value> = serde_json::from_str(json_str).unwrap();
-        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed.len(), 1); // one blockGroup
+        assert_eq!(parsed[0]["type"], "blockGroup");
+        let containers = parsed[0]["children"].as_array().unwrap();
+        assert_eq!(containers.len(), 2);
         yrs_free_string(json);
 
-        // Delete first block
+        // Delete first block (blockContainer at index 0 inside blockGroup)
         let mut del_len: u32 = 0;
         let del_update = yrs_doc_delete_block(doc, 0, &mut del_len);
         assert!(!del_update.is_null());
 
-        // Check we have 1 block
+        // Check we have 1 blockContainer left
         let json = yrs_doc_get_blocks_json(doc);
         let json_str = unsafe { CStr::from_ptr(json) }.to_str().unwrap();
         let parsed: Vec<serde_json::Value> = serde_json::from_str(json_str).unwrap();
-        assert_eq!(parsed.len(), 1);
-        // Remaining block should be the heading
-        assert_eq!(parsed[0]["type"], "heading");
+        let containers = parsed[0]["children"].as_array().unwrap();
+        assert_eq!(containers.len(), 1);
+        // Remaining container should hold the heading
+        assert!(json_str.contains("heading"));
         yrs_free_string(json);
 
         yrs_free_bytes(update1, len1);

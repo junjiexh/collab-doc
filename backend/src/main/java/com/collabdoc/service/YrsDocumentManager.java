@@ -7,6 +7,7 @@ import com.collabdoc.model.DocumentUpdate;
 import com.collabdoc.yrs.YrsBridge;
 import com.collabdoc.yrs.YrsDocument;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -113,6 +114,7 @@ public class YrsDocumentManager {
     }
 
     /** Create a snapshot and clean up incremental updates. */
+    @Transactional
     public void createSnapshot(UUID docId) {
         var doc = getOrLoadDocument(docId);
         synchronized (doc) {
