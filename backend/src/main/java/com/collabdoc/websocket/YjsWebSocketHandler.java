@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator;
 
 /**
  * WebSocket handler implementing the y-websocket sync protocol.
@@ -21,10 +22,15 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
 
     private final YrsDocumentManager docManager;
 
-    // docId -> set of sessions
+    private static final int SEND_TIME_LIMIT = 5000;   // 5 seconds
+    private static final int SEND_BUFFER_LIMIT = 512 * 1024; // 512 KB
+
+    // docId -> set of sessions (wrapped in ConcurrentWebSocketSessionDecorator)
     private final ConcurrentHashMap<UUID, Set<WebSocketSession>> rooms = new ConcurrentHashMap<>();
     // sessionId -> docId
     private final ConcurrentHashMap<String, UUID> sessionDocs = new ConcurrentHashMap<>();
+    // sessionId -> decorated session (for thread-safe sends)
+    private final ConcurrentHashMap<String, WebSocketSession> decoratedSessions = new ConcurrentHashMap<>();
 
     public YjsWebSocketHandler(YrsDocumentManager docManager) {
         this.docManager = docManager;
@@ -47,9 +53,13 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
         // Ensure document is loaded in memory
         docManager.getOrLoadDocument(docId);
 
+        // Wrap session for thread-safe concurrent sends
+        var decorated = new ConcurrentWebSocketSessionDecorator(session, SEND_TIME_LIMIT, SEND_BUFFER_LIMIT);
+
         // Add session to room
-        rooms.computeIfAbsent(docId, k -> ConcurrentHashMap.newKeySet()).add(session);
+        rooms.computeIfAbsent(docId, k -> ConcurrentHashMap.newKeySet()).add(decorated);
         sessionDocs.put(session.getId(), docId);
+        decoratedSessions.put(session.getId(), decorated);
 
         log.info("WebSocket connected: session={}, doc={}", session.getId(), docId);
 
@@ -57,7 +67,7 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
         try {
             byte[] sv = docManager.getStateVector(docId);
             byte[] msg = YjsSyncProtocol.encodeSyncStep1(sv);
-            session.sendMessage(new BinaryMessage(msg));
+            decorated.sendMessage(new BinaryMessage(msg));
         } catch (Exception e) {
             log.error("Failed to send initial sync", e);
         }
@@ -68,16 +78,19 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
         UUID docId = sessionDocs.get(session.getId());
         if (docId == null) return;
 
+        // Use the decorated session for any replies
+        WebSocketSession decorated = decoratedSessions.getOrDefault(session.getId(), session);
+
         ByteBuffer buf = ByteBuffer.wrap(message.getPayload().array());
         if (!buf.hasRemaining()) return;
 
         int msgType = buf.get() & 0xFF;
 
         if (msgType == YjsSyncProtocol.MSG_SYNC) {
-            handleSyncMessage(session, docId, buf);
+            handleSyncMessage(decorated, docId, buf);
         } else if (msgType == YjsSyncProtocol.MSG_AWARENESS) {
             // Broadcast awareness messages to all other sessions in the room
-            broadcastToOthers(docId, session, message.getPayload().array());
+            broadcastToOthers(docId, decorated, message.getPayload().array());
         }
     }
 
@@ -108,20 +121,24 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-        UUID docId = sessionDocs.remove(session.getId());
+        String sessionId = session.getId();
+        UUID docId = sessionDocs.remove(sessionId);
+        WebSocketSession decorated = decoratedSessions.remove(sessionId);
         if (docId != null) {
             Set<WebSocketSession> sessions = rooms.get(docId);
             if (sessions != null) {
-                sessions.remove(session);
+                // Remove the decorated wrapper (which is what we stored in rooms)
+                if (decorated != null) sessions.remove(decorated);
+                else sessions.remove(session);
                 if (sessions.isEmpty()) {
                     rooms.remove(docId);
-                    // Optionally create snapshot and unload document
+                    // Create snapshot and unload document
                     docManager.createSnapshot(docId);
                     docManager.unloadDocument(docId);
                 }
             }
         }
-        log.info("WebSocket disconnected: session={}, doc={}", session.getId(), docId);
+        log.info("WebSocket disconnected: session={}, doc={}", sessionId, docId);
     }
 
     /** Broadcast a Yjs update to all WebSocket sessions of a document (from Agent API). */
@@ -150,8 +167,8 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
             if (session.isOpen()) {
                 session.sendMessage(new BinaryMessage(data));
             }
-        } catch (IOException e) {
-            log.warn("Failed to send WebSocket message to session {}", session.getId(), e);
+        } catch (Exception e) {
+            log.warn("Failed to send WebSocket message to session {}: {}", session.getId(), e.getMessage());
         }
     }
 }

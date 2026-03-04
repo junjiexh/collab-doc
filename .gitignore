@@ -8,3 +8,4 @@ dist
 .idea
 .vscode
 *.iml
+test-results

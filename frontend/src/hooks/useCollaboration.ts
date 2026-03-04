@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
 
@@ -19,30 +19,44 @@ function randomName(): string {
   return `${adjectives[Math.floor(Math.random() * adjectives.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]}`;
 }
 
+interface CollabState {
+  doc: Y.Doc;
+  provider: WebsocketProvider;
+  fragment: Y.XmlFragment;
+}
+
 export function useCollaboration(docId: string) {
   const [synced, setSynced] = useState(false);
+  const [collab, setCollab] = useState<CollabState | null>(null);
+  const userRef = useRef({
+    name: randomName(),
+    color: COLORS[Math.floor(Math.random() * COLORS.length)],
+  });
 
-  const { doc, provider, fragment, user } = useMemo(() => {
+  useEffect(() => {
     const doc = new Y.Doc();
     const wsUrl = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`;
     const provider = new WebsocketProvider(wsUrl, docId, doc);
     const fragment = doc.getXmlFragment("document-store");
-    const user = {
-      name: randomName(),
-      color: COLORS[Math.floor(Math.random() * COLORS.length)],
-    };
-    return { doc, provider, fragment, user };
-  }, [docId]);
 
-  useEffect(() => {
     const onSync = (isSynced: boolean) => setSynced(isSynced);
     provider.on("sync", onSync);
+
+    setCollab({ doc, provider, fragment });
+
     return () => {
       provider.off("sync", onSync);
       provider.destroy();
       doc.destroy();
+      setCollab(null);
+      setSynced(false);
     };
-  }, [provider, doc]);
+  }, [docId]);
 
-  return { doc, provider, fragment, user, synced };
+  return {
+    provider: collab?.provider ?? null,
+    fragment: collab?.fragment ?? null,
+    user: userRef.current,
+    synced,
+  };
 }
