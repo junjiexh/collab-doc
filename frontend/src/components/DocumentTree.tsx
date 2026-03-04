@@ -5,20 +5,45 @@ import {
   closestCenter,
   DragEndEvent,
   DragStartEvent,
+  DragMoveEvent,
+  DragOverEvent,
+  DragCancelEvent,
   DragOverlay,
   PointerSensor,
   useSensor,
   useSensors,
+  MeasuringStrategy,
 } from "@dnd-kit/core";
 import {
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
+  AnimateLayoutChanges,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { TreeItem } from "./TreeItem";
 import type { TreeNode, FlattenedItem } from "../utils/tree";
-import { flattenTree, findNodeById, isAncestor } from "../utils/tree";
+import {
+  flattenTree,
+  flattenTreeFull,
+  findNodeById,
+  isAncestor,
+  getProjection,
+  removeChildrenOf,
+} from "../utils/tree";
+
+const INDENTATION_WIDTH = 20;
+
+const measuring = {
+  droppable: {
+    strategy: MeasuringStrategy.Always,
+  },
+};
+
+const animateLayoutChanges: AnimateLayoutChanges = ({
+  isSorting,
+  wasDragging,
+}) => (isSorting || wasDragging ? false : true);
 
 interface DocumentTreeProps {
   tree: TreeNode[];
@@ -31,6 +56,7 @@ interface DocumentTreeProps {
 
 function SortableTreeItem({
   item,
+  depth,
   isActive,
   expandedIds,
   onToggle,
@@ -39,6 +65,7 @@ function SortableTreeItem({
   onClick,
 }: {
   item: FlattenedItem;
+  depth: number;
   isActive: boolean;
   expandedIds: Set<string>;
   onToggle: (id: string) => void;
@@ -53,7 +80,7 @@ function SortableTreeItem({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: item.id });
+  } = useSortable({ id: item.id, animateLayoutChanges });
 
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -65,7 +92,7 @@ function SortableTreeItem({
       ref={setNodeRef}
       id={item.id}
       title={item.title}
-      depth={item.depth}
+      depth={depth}
       hasChildren={item.children.length > 0}
       isExpanded={expandedIds.has(item.id)}
       isActive={isActive}
@@ -91,74 +118,130 @@ export default function DocumentTree({
   const navigate = useNavigate();
   const { docId } = useParams<{ docId: string }>();
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const [offsetLeft, setOffsetLeft] = useState(0);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
 
-  const flatItems = useMemo(
-    () => flattenTree(tree, expandedIds),
-    [tree, expandedIds]
-  );
+  // Fully flattened tree (all nodes expanded) for projection calculations
+  const flatItemsFull = useMemo(() => flattenTreeFull(tree), [tree]);
+
+  // During drag, remove children of active item so they collapse visually
+  const sortedIds = useMemo(() => {
+    const items = activeId
+      ? removeChildrenOf(flatItemsFull, [activeId])
+      : flatItemsFull;
+    return items.map((i) => i.id);
+  }, [flatItemsFull, activeId]);
+
+  // Items for rendering: use expandedIds normally, but during drag use the
+  // full flatten with active's children removed
+  const flatItems = useMemo(() => {
+    if (activeId) {
+      return removeChildrenOf(flatItemsFull, [activeId]);
+    }
+    return flattenTree(tree, expandedIds);
+  }, [tree, expandedIds, flatItemsFull, activeId]);
+
+  const projected =
+    activeId && overId
+      ? getProjection(
+          flatItems,
+          activeId,
+          overId,
+          offsetLeft,
+          INDENTATION_WIDTH
+        )
+      : null;
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveId(String(event.active.id));
+    setOverId(String(event.active.id));
+    setOffsetLeft(0);
+  }, []);
+
+  const handleDragMove = useCallback((event: DragMoveEvent) => {
+    setOffsetLeft(event.delta.x);
+  }, []);
+
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    if (event.over) {
+      setOverId(String(event.over.id));
+    }
   }, []);
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
-      setActiveId(null);
-      const { active, over, delta } = event;
-      if (!over || active.id === over.id) return;
+      const { active, over } = event;
+      resetState();
 
-      const activeItem = flatItems.find((i) => i.id === active.id);
-      const overItem = flatItems.find((i) => i.id === over.id);
-      if (!activeItem || !overItem) return;
+      if (!over || !projected) return;
+
+      const activeItemData = flatItems.find((i) => i.id === active.id);
+      if (!activeItemData) return;
+
+      const { parentId: newParentId } = projected;
+
+      // If nothing changed (same position & same parent), skip
+      if (active.id === over.id && activeItemData.parentId === newParentId)
+        return;
 
       // Prevent dropping a parent into its own descendant
-      if (isAncestor(tree, String(active.id), String(over.id))) return;
+      if (newParentId && isAncestor(tree, String(active.id), newParentId))
+        return;
 
-      // Determine if we should nest under the target or place as sibling.
-      // If dragged significantly to the right (>30px), make it a child of the over item.
-      const INDENT_THRESHOLD = 30;
-      const shouldNest =
-        delta.x > INDENT_THRESHOLD &&
-        overItem.id !== activeItem.parentId; // don't re-nest under current parent
+      // Calculate newIndex among siblings
+      let siblingList: TreeNode[];
+      if (newParentId) {
+        const parentNode = findNodeById(tree, newParentId);
+        siblingList = parentNode ? parentNode.children : [];
+      } else {
+        siblingList = tree;
+      }
 
-      let newParentId: string | null;
+      const filteredSiblings = siblingList.filter(
+        (s) => s.id !== String(active.id)
+      );
+
       let newIndex: number;
 
-      if (shouldNest) {
-        // Make it the last child of the over item
-        newParentId = overItem.id;
-        const overNode = findNodeById(tree, overItem.id);
-        newIndex = overNode
-          ? overNode.children.filter((c) => c.id !== activeItem.id).length
-          : 0;
+      if (active.id === over.id) {
+        // Only depth changed (horizontal drag) — place at end of new parent
+        newIndex = filteredSiblings.length;
       } else {
-        // Place as sibling of the over item
-        newParentId = overItem.parentId;
-        // Find siblings in the tree (not flatItems, which is filtered by expanded state)
-        let siblingList: TreeNode[];
-        if (newParentId) {
-          const parentNode = findNodeById(tree, newParentId);
-          siblingList = parentNode ? parentNode.children : [];
+        const overItem = flatItems.find((i) => i.id === over.id);
+        if (!overItem) return;
+
+        const overSiblingIdx = filteredSiblings.findIndex(
+          (s) => s.id === overItem.id
+        );
+
+        if (overSiblingIdx !== -1) {
+          const activeIndex = flatItems.findIndex((i) => i.id === active.id);
+          const overIndex = flatItems.findIndex((i) => i.id === over.id);
+          const movingDown = activeIndex < overIndex;
+          newIndex = movingDown ? overSiblingIdx + 1 : overSiblingIdx;
         } else {
-          siblingList = tree;
+          newIndex = filteredSiblings.length;
         }
-        const filtered = siblingList.filter((s) => s.id !== activeItem.id);
-        const overIdx = filtered.findIndex((s) => s.id === overItem.id);
-        // Place after or before based on vertical direction
-        const activeIdx = flatItems.findIndex((i) => i.id === active.id);
-        const overFlatIdx = flatItems.findIndex((i) => i.id === over.id);
-        const movingDown = activeIdx < overFlatIdx;
-        newIndex = overIdx === -1 ? 0 : movingDown ? overIdx + 1 : overIdx;
       }
 
       onMove(String(active.id), newParentId, newIndex);
     },
-    [flatItems, tree, onMove]
+    [flatItems, tree, onMove, projected]
   );
+
+  const handleDragCancel = useCallback((_event: DragCancelEvent) => {
+    resetState();
+  }, []);
+
+  function resetState() {
+    setActiveId(null);
+    setOverId(null);
+    setOffsetLeft(0);
+  }
 
   const activeItem = activeId
     ? flatItems.find((i) => i.id === activeId)
@@ -168,17 +251,26 @@ export default function DocumentTree({
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
+      measuring={measuring}
       onDragStart={handleDragStart}
+      onDragMove={handleDragMove}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
     >
       <SortableContext
-        items={flatItems.map((i) => i.id)}
+        items={sortedIds}
         strategy={verticalListSortingStrategy}
       >
         {flatItems.map((item) => (
           <SortableTreeItem
             key={item.id}
             item={item}
+            depth={
+              item.id === activeId && projected
+                ? projected.depth
+                : item.depth
+            }
             isActive={docId === item.id}
             expandedIds={expandedIds}
             onToggle={onToggle}
@@ -194,7 +286,7 @@ export default function DocumentTree({
           <TreeItem
             id={activeItem.id}
             title={activeItem.title}
-            depth={0}
+            depth={projected ? projected.depth : 0}
             hasChildren={activeItem.children.length > 0}
             isExpanded={false}
             isActive={false}

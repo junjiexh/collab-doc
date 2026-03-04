@@ -41,6 +41,7 @@ export const TreeItem = forwardRef<HTMLDivElement, TreeItemProps>(
           alignItems: "center",
           padding: "4px 8px",
           paddingLeft: `${depth * 20 + 8}px`,
+          transition: "padding-left 0.15s ease",
           cursor: "pointer",
           borderRadius: 4,
           backgroundColor: isActive
