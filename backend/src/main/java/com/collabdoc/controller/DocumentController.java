@@ -24,10 +24,27 @@ public class DocumentController {
         return documentService.listDocuments();
     }
 
+    @GetMapping("/tree")
+    public List<Document> listDocumentsForTree() {
+        return documentService.listDocumentsForTree();
+    }
+
     @PostMapping
     public Document createDocument(@RequestBody Map<String, String> body) {
         String title = body.getOrDefault("title", "Untitled");
-        return documentService.createDocument(title);
+        String parentIdStr = body.get("parentId");
+        UUID parentId = parentIdStr != null ? UUID.fromString(parentIdStr) : null;
+        return documentService.createDocument(title, parentId);
+    }
+
+    @PutMapping("/{id}/move")
+    public ResponseEntity<Document> moveDocument(@PathVariable UUID id, @RequestBody Map<String, Object> body) {
+        String parentIdStr = (String) body.get("parentId");
+        UUID parentId = parentIdStr != null ? UUID.fromString(parentIdStr) : null;
+        int sortOrder = (int) body.get("sortOrder");
+        return documentService.moveDocument(id, parentId, sortOrder)
+            .map(ResponseEntity::ok)
+            .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/{id}")

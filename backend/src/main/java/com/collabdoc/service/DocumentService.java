@@ -19,7 +19,32 @@ public class DocumentService {
     }
 
     public Document createDocument(String title) {
-        return documentRepository.save(new Document(title));
+        return createDocument(title, null);
+    }
+
+    public Document createDocument(String title, UUID parentId) {
+        int maxSort;
+        if (parentId == null) {
+            maxSort = documentRepository.findMaxSortOrderForRoot();
+        } else {
+            maxSort = documentRepository.findMaxSortOrderByParentId(parentId);
+        }
+        Document doc = new Document(title, parentId);
+        doc.setSortOrder(maxSort + 1);
+        return documentRepository.save(doc);
+    }
+
+    public List<Document> listDocumentsForTree() {
+        return documentRepository.findAllByOrderBySortOrderAsc();
+    }
+
+    public Optional<Document> moveDocument(UUID id, UUID newParentId, int sortOrder) {
+        return documentRepository.findById(id).map(doc -> {
+            doc.setParentId(newParentId);
+            doc.setSortOrder(sortOrder);
+            doc.setUpdatedAt(Instant.now());
+            return documentRepository.save(doc);
+        });
     }
 
     public Optional<Document> getDocument(UUID id) {
