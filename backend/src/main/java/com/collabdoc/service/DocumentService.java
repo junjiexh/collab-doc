@@ -38,12 +38,33 @@ public class DocumentService {
         return documentRepository.findAllByOrderBySortOrderAsc();
     }
 
-    public Optional<Document> moveDocument(UUID id, UUID newParentId, int sortOrder) {
+    public Optional<Document> moveDocument(UUID id, UUID newParentId, int targetIndex) {
         return documentRepository.findById(id).map(doc -> {
+            // Get siblings at the destination (excluding the moved doc)
+            List<Document> siblings;
+            if (newParentId == null) {
+                siblings = documentRepository.findByParentIdIsNullOrderBySortOrderAsc();
+            } else {
+                siblings = documentRepository.findByParentIdOrderBySortOrderAsc(newParentId);
+            }
+            siblings.removeIf(d -> d.getId().equals(id));
+
+            // Clamp target index
+            int insertAt = Math.max(0, Math.min(targetIndex, siblings.size()));
+
+            // Insert the moved doc at the target position
+            siblings.add(insertAt, doc);
+
+            // Re-number all siblings sequentially
+            for (int i = 0; i < siblings.size(); i++) {
+                siblings.get(i).setSortOrder(i);
+            }
+
             doc.setParentId(newParentId);
-            doc.setSortOrder(sortOrder);
             doc.setUpdatedAt(Instant.now());
-            return documentRepository.save(doc);
+
+            documentRepository.saveAll(siblings);
+            return doc;
         });
     }
 

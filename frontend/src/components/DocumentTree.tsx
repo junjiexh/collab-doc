@@ -18,7 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { TreeItem } from "./TreeItem";
 import type { TreeNode, FlattenedItem } from "../utils/tree";
-import { flattenTree, isAncestor } from "../utils/tree";
+import { flattenTree, findNodeById, isAncestor } from "../utils/tree";
 
 interface DocumentTreeProps {
   tree: TreeNode[];
@@ -108,7 +108,7 @@ export default function DocumentTree({
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       setActiveId(null);
-      const { active, over } = event;
+      const { active, over, delta } = event;
       if (!over || active.id === over.id) return;
 
       const activeItem = flatItems.find((i) => i.id === active.id);
@@ -118,13 +118,42 @@ export default function DocumentTree({
       // Prevent dropping a parent into its own descendant
       if (isAncestor(tree, String(active.id), String(over.id))) return;
 
-      // Move to same parent as the target, at target's position
-      const newParentId = overItem.parentId;
-      const siblings = flatItems.filter(
-        (i) => i.parentId === newParentId && i.id !== String(active.id)
-      );
-      const overIndex = siblings.findIndex((i) => i.id === over.id);
-      const newIndex = overIndex === -1 ? 0 : overIndex;
+      // Determine if we should nest under the target or place as sibling.
+      // If dragged significantly to the right (>30px), make it a child of the over item.
+      const INDENT_THRESHOLD = 30;
+      const shouldNest =
+        delta.x > INDENT_THRESHOLD &&
+        overItem.id !== activeItem.parentId; // don't re-nest under current parent
+
+      let newParentId: string | null;
+      let newIndex: number;
+
+      if (shouldNest) {
+        // Make it the last child of the over item
+        newParentId = overItem.id;
+        const overNode = findNodeById(tree, overItem.id);
+        newIndex = overNode
+          ? overNode.children.filter((c) => c.id !== activeItem.id).length
+          : 0;
+      } else {
+        // Place as sibling of the over item
+        newParentId = overItem.parentId;
+        // Find siblings in the tree (not flatItems, which is filtered by expanded state)
+        let siblingList: TreeNode[];
+        if (newParentId) {
+          const parentNode = findNodeById(tree, newParentId);
+          siblingList = parentNode ? parentNode.children : [];
+        } else {
+          siblingList = tree;
+        }
+        const filtered = siblingList.filter((s) => s.id !== activeItem.id);
+        const overIdx = filtered.findIndex((s) => s.id === overItem.id);
+        // Place after or before based on vertical direction
+        const activeIdx = flatItems.findIndex((i) => i.id === active.id);
+        const overFlatIdx = flatItems.findIndex((i) => i.id === over.id);
+        const movingDown = activeIdx < overFlatIdx;
+        newIndex = overIdx === -1 ? 0 : movingDown ? overIdx + 1 : overIdx;
+      }
 
       onMove(String(active.id), newParentId, newIndex);
     },

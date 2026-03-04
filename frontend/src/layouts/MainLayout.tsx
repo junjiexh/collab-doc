@@ -88,6 +88,15 @@ export default function MainLayout() {
   const handleMove = useCallback(
     async (id: string, newParentId: string | null, newIndex: number) => {
       await apiMoveDocument(id, newParentId, newIndex);
+      // Auto-expand new parent so user can see the result
+      if (newParentId) {
+        setExpandedIds((prev) => {
+          const next = new Set(prev);
+          next.add(newParentId);
+          saveExpandedIds(next);
+          return next;
+        });
+      }
       await refreshTree();
     },
     [refreshTree]

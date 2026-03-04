@@ -10,6 +10,10 @@ public interface DocumentRepository extends JpaRepository<Document, UUID> {
 
     List<Document> findAllByOrderBySortOrderAsc();
 
+    List<Document> findByParentIdOrderBySortOrderAsc(UUID parentId);
+
+    List<Document> findByParentIdIsNullOrderBySortOrderAsc();
+
     @Query("SELECT COALESCE(MAX(d.sortOrder), -1) FROM Document d WHERE d.parentId = :parentId")
     int findMaxSortOrderByParentId(UUID parentId);
 
