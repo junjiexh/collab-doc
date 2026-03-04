@@ -1,0 +1,8 @@
+.tree-item-actions {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+div:hover > .tree-item-actions {
+  opacity: 1;
+}
