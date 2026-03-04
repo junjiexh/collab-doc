@@ -1,8 +1,10 @@
 node_modules
 target
 build
+dist
 .gradle
 *.class
+*.tsbuildinfo
 .idea
 .vscode
 *.iml

@@ -1,3 +1,14 @@
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import DocumentList from "./pages/DocumentList";
+import EditorPage from "./pages/EditorPage";
+
 export default function App() {
-  return <div><h1>CollabDoc</h1><p>Loading...</p></div>;
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<DocumentList />} />
+        <Route path="/doc/:docId" element={<EditorPage />} />
+      </Routes>
+    </BrowserRouter>
+  );
 }
