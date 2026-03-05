@@ -18,73 +18,74 @@ public class DocumentService {
         this.documentRepository = documentRepository;
     }
 
-    public Document createDocument(String title) {
-        return createDocument(title, null);
-    }
-
-    public Document createDocument(String title, UUID parentId) {
+    public Document createDocument(String title, UUID parentId, UUID ownerId) {
         int maxSort;
         if (parentId == null) {
-            maxSort = documentRepository.findMaxSortOrderForRoot();
+            maxSort = documentRepository.findMaxSortOrderByOwnerIdForRoot(ownerId);
         } else {
-            maxSort = documentRepository.findMaxSortOrderByParentId(parentId);
+            maxSort = documentRepository.findMaxSortOrderByOwnerIdAndParentId(ownerId, parentId);
         }
         Document doc = new Document(title, parentId);
+        doc.setOwnerId(ownerId);
         doc.setSortOrder(maxSort + 1);
         return documentRepository.save(doc);
     }
 
-    public List<Document> listDocumentsForTree() {
-        return documentRepository.findAllByOrderBySortOrderAsc();
+    public List<Document> listDocumentsForTree(UUID ownerId) {
+        return documentRepository.findByOwnerIdOrderBySortOrderAsc(ownerId);
     }
 
-    public Optional<Document> moveDocument(UUID id, UUID newParentId, int targetIndex) {
-        return documentRepository.findById(id).map(doc -> {
-            // Get siblings at the destination (excluding the moved doc)
-            List<Document> siblings;
-            if (newParentId == null) {
-                siblings = documentRepository.findByParentIdIsNullOrderBySortOrderAsc();
-            } else {
-                siblings = documentRepository.findByParentIdOrderBySortOrderAsc(newParentId);
-            }
-            siblings.removeIf(d -> d.getId().equals(id));
-
-            // Clamp target index
-            int insertAt = Math.max(0, Math.min(targetIndex, siblings.size()));
-
-            // Insert the moved doc at the target position
-            siblings.add(insertAt, doc);
-
-            // Re-number all siblings sequentially
-            for (int i = 0; i < siblings.size(); i++) {
-                siblings.get(i).setSortOrder(i);
-            }
-
-            doc.setParentId(newParentId);
-            doc.setUpdatedAt(Instant.now());
-
-            documentRepository.saveAll(siblings);
-            return doc;
-        });
+    public Optional<Document> moveDocument(UUID id, UUID newParentId, int targetIndex, UUID ownerId) {
+        return documentRepository.findById(id)
+                .filter(doc -> ownerId.equals(doc.getOwnerId()))
+                .map(doc -> {
+                    List<Document> siblings;
+                    if (newParentId == null) {
+                        siblings = documentRepository.findByOwnerIdAndParentIdIsNullOrderBySortOrderAsc(ownerId);
+                    } else {
+                        siblings = documentRepository.findByOwnerIdAndParentIdOrderBySortOrderAsc(ownerId, newParentId);
+                    }
+                    siblings.removeIf(d -> d.getId().equals(id));
+                    int insertAt = Math.max(0, Math.min(targetIndex, siblings.size()));
+                    siblings.add(insertAt, doc);
+                    for (int i = 0; i < siblings.size(); i++) {
+                        siblings.get(i).setSortOrder(i);
+                    }
+                    doc.setParentId(newParentId);
+                    doc.setUpdatedAt(Instant.now());
+                    documentRepository.saveAll(siblings);
+                    return doc;
+                });
     }
 
-    public Optional<Document> getDocument(UUID id) {
-        return documentRepository.findById(id);
+    public Optional<Document> getDocument(UUID id, UUID ownerId) {
+        return documentRepository.findById(id)
+                .filter(doc -> ownerId.equals(doc.getOwnerId()));
     }
 
-    public List<Document> listDocuments() {
-        return documentRepository.findAll();
+    public Optional<Document> updateTitle(UUID id, String title, UUID ownerId) {
+        return documentRepository.findById(id)
+                .filter(doc -> ownerId.equals(doc.getOwnerId()))
+                .map(doc -> {
+                    doc.setTitle(title);
+                    doc.setUpdatedAt(Instant.now());
+                    return documentRepository.save(doc);
+                });
     }
 
-    public Optional<Document> updateTitle(UUID id, String title) {
-        return documentRepository.findById(id).map(doc -> {
-            doc.setTitle(title);
-            doc.setUpdatedAt(Instant.now());
-            return documentRepository.save(doc);
-        });
+    public boolean deleteDocument(UUID id, UUID ownerId) {
+        return documentRepository.findById(id)
+                .filter(doc -> ownerId.equals(doc.getOwnerId()))
+                .map(doc -> {
+                    documentRepository.deleteById(id);
+                    return true;
+                })
+                .orElse(false);
     }
 
-    public void deleteDocument(UUID id) {
-        documentRepository.deleteById(id);
+    public boolean isOwner(UUID docId, UUID ownerId) {
+        return documentRepository.findById(docId)
+                .map(doc -> ownerId.equals(doc.getOwnerId()))
+                .orElse(false);
     }
 }

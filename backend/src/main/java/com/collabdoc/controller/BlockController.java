@@ -1,8 +1,10 @@
 package com.collabdoc.controller;
 
+import com.collabdoc.service.DocumentService;
 import com.collabdoc.service.YrsDocumentManager;
 import com.collabdoc.websocket.YjsWebSocketHandler;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -14,24 +16,33 @@ public class BlockController {
 
     private final YrsDocumentManager docManager;
     private final YjsWebSocketHandler wsHandler;
+    private final DocumentService documentService;
 
-    public BlockController(YrsDocumentManager docManager, YjsWebSocketHandler wsHandler) {
+    public BlockController(YrsDocumentManager docManager, YjsWebSocketHandler wsHandler, DocumentService documentService) {
         this.docManager = docManager;
         this.wsHandler = wsHandler;
+        this.documentService = documentService;
     }
 
     /** Get document content as JSON string. */
     @GetMapping
-    public ResponseEntity<Map<String, String>> getBlocks(@PathVariable UUID docId) {
+    public ResponseEntity<?> getBlocks(@AuthenticationPrincipal UUID userId, @PathVariable UUID docId) {
+        if (!documentService.isOwner(docId, userId)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Forbidden"));
+        }
         String json = docManager.getBlocksJson(docId);
         return ResponseEntity.ok(Map.of("content", json));
     }
 
     /** Insert a block at the given index. */
     @PostMapping
-    public ResponseEntity<Map<String, String>> insertBlock(
+    public ResponseEntity<?> insertBlock(
+            @AuthenticationPrincipal UUID userId,
             @PathVariable UUID docId,
             @RequestBody Map<String, Object> body) {
+        if (!documentService.isOwner(docId, userId)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Forbidden"));
+        }
         int index = ((Number) body.getOrDefault("index", 0)).intValue();
         String blockType = (String) body.getOrDefault("type", "paragraph");
         String content = (String) body.get("content");
@@ -48,9 +59,13 @@ public class BlockController {
 
     /** Delete a block at the given index. */
     @DeleteMapping("/{index}")
-    public ResponseEntity<Map<String, String>> deleteBlock(
+    public ResponseEntity<?> deleteBlock(
+            @AuthenticationPrincipal UUID userId,
             @PathVariable UUID docId,
             @PathVariable int index) {
+        if (!documentService.isOwner(docId, userId)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Forbidden"));
+        }
         byte[] update = docManager.deleteBlock(docId, index);
         if (update != null) {
             wsHandler.broadcastUpdate(docId, update);
