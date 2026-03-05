@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Outlet, useNavigate, useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import { useAuth } from "../contexts/AuthContext";
 import {
   fetchDocumentTree,
   createDocument,
@@ -26,6 +27,7 @@ function saveExpandedIds(ids: Set<string>) {
 }
 
 export default function MainLayout() {
+  const { user, logout } = useAuth();
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(loadExpandedIds);
   const navigate = useNavigate();
@@ -113,15 +115,23 @@ export default function MainLayout() {
 
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-      <Sidebar
-        tree={tree}
-        expandedIds={expandedIds}
-        onToggle={handleToggle}
-        onCreateChild={handleCreateChild}
-        onCreateRoot={handleCreateRoot}
-        onDelete={handleDelete}
-        onMove={handleMove}
-      />
+      <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+        <Sidebar
+          tree={tree}
+          expandedIds={expandedIds}
+          onToggle={handleToggle}
+          onCreateChild={handleCreateChild}
+          onCreateRoot={handleCreateRoot}
+          onDelete={handleDelete}
+          onMove={handleMove}
+        />
+        <div style={{ padding: "8px 12px", borderTop: "1px solid #e5e5e5", fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ color: "#666" }}>{user?.username}</span>
+          <button onClick={logout} style={{ background: "none", border: "none", color: "#999", cursor: "pointer", fontSize: 13 }}>
+            Log out
+          </button>
+        </div>
+      </div>
       <div style={{ flex: 1, overflow: "auto" }}>
         <Outlet context={{ tree, onRename: handleRename }} />
       </div>
