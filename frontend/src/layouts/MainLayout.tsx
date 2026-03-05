@@ -6,6 +6,7 @@ import {
   createDocument,
   deleteDocument,
   moveDocument as apiMoveDocument,
+  renameDocument,
 } from "../api";
 import { buildTree, isAncestor, type TreeNode } from "../utils/tree";
 
@@ -85,6 +86,14 @@ export default function MainLayout() {
     [docId, tree, navigate, refreshTree]
   );
 
+  const handleRename = useCallback(
+    async (id: string, title: string) => {
+      await renameDocument(id, title);
+      await refreshTree();
+    },
+    [refreshTree]
+  );
+
   const handleMove = useCallback(
     async (id: string, newParentId: string | null, newIndex: number) => {
       await apiMoveDocument(id, newParentId, newIndex);
@@ -114,7 +123,7 @@ export default function MainLayout() {
         onMove={handleMove}
       />
       <div style={{ flex: 1, overflow: "auto" }}>
-        <Outlet />
+        <Outlet context={{ tree, onRename: handleRename }} />
       </div>
     </div>
   );

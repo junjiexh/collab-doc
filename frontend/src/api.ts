@@ -32,6 +32,15 @@ export async function fetchDocumentTree(): Promise<DocumentMeta[]> {
   return res.json();
 }
 
+export async function renameDocument(id: string, title: string): Promise<DocumentMeta> {
+  const res = await fetch(`${API_BASE}/docs/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  return res.json();
+}
+
 export async function moveDocument(id: string, parentId: string | null, sortOrder: number): Promise<DocumentMeta> {
   const res = await fetch(`${API_BASE}/docs/${id}/move`, {
     method: "PUT",
