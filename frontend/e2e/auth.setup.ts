@@ -3,15 +3,16 @@ import { test as setup } from "@playwright/test";
 const API_BASE = "http://localhost:8080/api";
 const TEST_USER = { username: "e2e_testuser", password: "testpass123" };
 
-setup("authenticate", async ({ request, context }) => {
+setup("authenticate", async ({ page }) => {
   // Try to register; if user already exists, login instead
-  const registerRes = await request.post(`${API_BASE}/auth/register`, {
+  // Use page.request so cookies are stored in the browser context
+  const registerRes = await page.request.post(`${API_BASE}/auth/register`, {
     data: TEST_USER,
   });
 
   if (registerRes.status() === 409) {
     // User already exists — login
-    const loginRes = await request.post(`${API_BASE}/auth/login`, {
+    const loginRes = await page.request.post(`${API_BASE}/auth/login`, {
       data: TEST_USER,
     });
     if (!loginRes.ok()) {
@@ -22,5 +23,5 @@ setup("authenticate", async ({ request, context }) => {
   }
 
   // Save cookies (storageState) for all tests to reuse
-  await context.storageState({ path: "e2e/.auth/user.json" });
+  await page.context().storageState({ path: "e2e/.auth/user.json" });
 });
