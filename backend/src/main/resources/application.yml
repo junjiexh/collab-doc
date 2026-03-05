@@ -16,3 +16,6 @@ server:
 collabdoc:
   yrs-bridge:
     library-path: ${YRS_BRIDGE_LIB_PATH:../yrs-bridge/target/release/libyrs_bridge.dylib}
+  jwt:
+    secret: change-me-to-a-random-64-char-string-in-production-please-now
+    expiration-days: 7
