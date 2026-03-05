@@ -1,8 +1,6 @@
-package com.collabdoc.controller;
+package com.collabdoc.collab;
 
-import com.collabdoc.service.DocumentService;
-import com.collabdoc.service.YrsDocumentManager;
-import com.collabdoc.websocket.YjsWebSocketHandler;
+import com.collabdoc.document.DocumentService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;

@@ -1,6 +1,5 @@
-package com.collabdoc.repository;
+package com.collabdoc.collab;
 
-import com.collabdoc.model.DocumentUpdate;
 import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 import java.util.UUID;

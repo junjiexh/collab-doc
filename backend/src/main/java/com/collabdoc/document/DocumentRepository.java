@@ -1,6 +1,5 @@
-package com.collabdoc.repository;
+package com.collabdoc.document;
 
-import com.collabdoc.model.Document;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import java.util.List;

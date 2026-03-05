@@ -1,4 +1,4 @@
-package com.collabdoc.websocket;
+package com.collabdoc.collab;
 
 import java.nio.ByteBuffer;
 

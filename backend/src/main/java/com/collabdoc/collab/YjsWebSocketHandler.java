@@ -1,7 +1,6 @@
-package com.collabdoc.websocket;
+package com.collabdoc.collab;
 
-import com.collabdoc.service.DocumentService;
-import com.collabdoc.service.YrsDocumentManager;
+import com.collabdoc.document.DocumentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.socket.*;

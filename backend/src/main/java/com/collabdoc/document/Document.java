@@ -1,4 +1,4 @@
-package com.collabdoc.model;
+package com.collabdoc.document;
 
 import jakarta.persistence.*;
 import java.time.Instant;

@@ -1,9 +1,9 @@
 package com.collabdoc.config;
 
 import com.collabdoc.auth.JwtUtil;
-import com.collabdoc.service.DocumentService;
-import com.collabdoc.service.YrsDocumentManager;
-import com.collabdoc.websocket.YjsWebSocketHandler;
+import com.collabdoc.document.DocumentService;
+import com.collabdoc.collab.YrsDocumentManager;
+import com.collabdoc.collab.YjsWebSocketHandler;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.context.annotation.Bean;

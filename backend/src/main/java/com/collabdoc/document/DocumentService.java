@@ -1,7 +1,5 @@
-package com.collabdoc.service;
+package com.collabdoc.document;
 
-import com.collabdoc.model.Document;
-import com.collabdoc.repository.DocumentRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;

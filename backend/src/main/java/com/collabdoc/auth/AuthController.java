@@ -1,6 +1,5 @@
 package com.collabdoc.auth;
 
-import com.collabdoc.model.User;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;

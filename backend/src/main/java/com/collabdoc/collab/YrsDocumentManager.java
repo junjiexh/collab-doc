@@ -1,9 +1,5 @@
-package com.collabdoc.service;
+package com.collabdoc.collab;
 
-import com.collabdoc.repository.DocumentSnapshotRepository;
-import com.collabdoc.repository.DocumentUpdateRepository;
-import com.collabdoc.model.DocumentSnapshot;
-import com.collabdoc.model.DocumentUpdate;
 import com.collabdoc.yrs.YrsBridge;
 import com.collabdoc.yrs.YrsDocument;
 import org.springframework.stereotype.Service;
