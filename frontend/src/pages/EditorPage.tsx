@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useParams, useOutletContext } from "react-router-dom";
 import CollaborativeEditor from "../components/CollaborativeEditor";
+import { useAuth } from "../contexts/AuthContext";
 import { findNodeById, type TreeNode } from "../utils/tree";
 
 interface OutletContext {
@@ -11,6 +12,7 @@ interface OutletContext {
 export default function EditorPage() {
   const { docId } = useParams<{ docId: string }>();
   const { tree, onRename } = useOutletContext<OutletContext>();
+  const { user: authUser } = useAuth();
   const titleRef = useRef<HTMLDivElement>(null);
   const lastSavedTitle = useRef("");
 
@@ -74,7 +76,7 @@ export default function EditorPage() {
           pointer-events: none;
         }
       `}</style>
-      <CollaborativeEditor docId={docId} />
+      <CollaborativeEditor docId={docId} username={authUser!.username} userId={authUser!.id} />
     </div>
   );
 }

@@ -7,12 +7,16 @@ import { useCollaboration } from "../hooks/useCollaboration";
 
 interface CollaborativeEditorProps {
   docId: string;
+  username: string;
+  userId: string;
 }
 
 export default function CollaborativeEditor({
   docId,
+  username,
+  userId,
 }: CollaborativeEditorProps) {
-  const { provider, fragment, user, synced } = useCollaboration(docId);
+  const { provider, fragment, user, synced } = useCollaboration(docId, username, userId);
 
   if (!synced || !provider || !fragment) {
     return <div style={{ padding: 24, color: "#888" }}>Connecting...</div>;
