@@ -1,5 +1,6 @@
 package com.collabdoc.websocket;
 
+import com.collabdoc.service.DocumentService;
 import com.collabdoc.service.YrsDocumentManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +22,7 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
     private static final Logger log = LoggerFactory.getLogger(YjsWebSocketHandler.class);
 
     private final YrsDocumentManager docManager;
+    private final DocumentService documentService;
 
     private static final int SEND_TIME_LIMIT = 5000;   // 5 seconds
     private static final int SEND_BUFFER_LIMIT = 512 * 1024; // 512 KB
@@ -32,8 +34,15 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
     // sessionId -> decorated session (for thread-safe sends)
     private final ConcurrentHashMap<String, WebSocketSession> decoratedSessions = new ConcurrentHashMap<>();
 
+    // Keep original constructor for backward compatibility
     public YjsWebSocketHandler(YrsDocumentManager docManager) {
         this.docManager = docManager;
+        this.documentService = null;
+    }
+
+    public YjsWebSocketHandler(YrsDocumentManager docManager, DocumentService documentService) {
+        this.docManager = docManager;
+        this.documentService = documentService;
     }
 
     @Override
@@ -46,6 +55,14 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
             docId = UUID.fromString(docIdStr);
         } catch (IllegalArgumentException e) {
             log.warn("Invalid document ID in WebSocket path: {}", docIdStr);
+            try { session.close(); } catch (IOException ignored) {}
+            return;
+        }
+
+        // Verify ownership
+        UUID userId = (UUID) session.getAttributes().get("userId");
+        if (userId == null || (documentService != null && !documentService.isOwner(docId, userId))) {
+            log.warn("Unauthorized WebSocket access: user={}, doc={}", userId, docId);
             try { session.close(); } catch (IOException ignored) {}
             return;
         }
