@@ -24,6 +24,9 @@ public class Document {
     @Column(name = "sort_order", nullable = false)
     private Integer sortOrder = 0;
 
+    @Column(name = "owner_id")
+    private UUID ownerId;
+
     protected Document() {}
 
     public Document(String title) {
@@ -49,4 +52,6 @@ public class Document {
     public void setParentId(UUID parentId) { this.parentId = parentId; }
     public Integer getSortOrder() { return sortOrder; }
     public void setSortOrder(Integer sortOrder) { this.sortOrder = sortOrder; }
+    public UUID getOwnerId() { return ownerId; }
+    public void setOwnerId(UUID ownerId) { this.ownerId = ownerId; }
 }
