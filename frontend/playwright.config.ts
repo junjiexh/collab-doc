@@ -7,5 +7,17 @@ export default defineConfig({
     baseURL: "http://localhost:3000",
     headless: true,
   },
-  // Don't start servers — assume backend (8080) and frontend (3000) are already running
+  projects: [
+    {
+      name: "setup",
+      testMatch: /auth\.setup\.ts/,
+    },
+    {
+      name: "tests",
+      dependencies: ["setup"],
+      use: {
+        storageState: "e2e/.auth/user.json",
+      },
+    },
+  ],
 });
