@@ -1,6 +1,8 @@
 package com.collabdoc.auth;
 
 import com.collabdoc.model.User;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -70,10 +72,12 @@ public class AuthController {
     @GetMapping("/me")
     public ResponseEntity<Map<String, Object>> me(
             @AuthenticationPrincipal UUID userId,
-            @RequestHeader(value = "X-Auth-Username", required = false) String username) {
+            HttpServletRequest request) {
         if (userId == null) {
             return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
         }
+        // Read username from request attribute set by JwtAuthFilter
+        String username = (String) request.getAttribute("authUsername");
         return ResponseEntity.ok(Map.of("id", userId, "username", username != null ? username : ""));
     }
 

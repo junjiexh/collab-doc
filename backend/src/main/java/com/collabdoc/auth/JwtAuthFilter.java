@@ -32,15 +32,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String username = jwtUtil.getUsername(token);
             var auth = new UsernamePasswordAuthenticationToken(userId, null, List.of());
             SecurityContextHolder.getContext().setAuthentication(auth);
-            // Wrap request to provide username header for controller access
-            var wrapper = new jakarta.servlet.http.HttpServletRequestWrapper(request) {
-                @Override
-                public String getHeader(String name) {
-                    if ("X-Auth-Username".equalsIgnoreCase(name)) return username;
-                    return super.getHeader(name);
-                }
-            };
-            chain.doFilter(wrapper, response);
+            request.setAttribute("authUsername", username);
+            chain.doFilter(request, response);
             return;
         }
         chain.doFilter(request, response);
