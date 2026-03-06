@@ -50,7 +50,7 @@ function BlockNoteEditor({
 
   return (
     <div style={{ minHeight: "70vh" }}>
-      <BlockNoteView editor={editor} editable={editable} />
+      <BlockNoteView editor={editor} editable={editable} theme="light" />
     </div>
   );
 }
