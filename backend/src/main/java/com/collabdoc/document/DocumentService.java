@@ -58,21 +58,6 @@ public class DocumentService {
                 });
     }
 
-    public Optional<Document> getDocument(UUID id, UUID ownerId) {
-        return documentRepository.findById(id)
-                .filter(doc -> ownerId.equals(doc.getOwnerId()));
-    }
-
-    public Optional<Document> updateTitle(UUID id, String title, UUID ownerId) {
-        return documentRepository.findById(id)
-                .filter(doc -> ownerId.equals(doc.getOwnerId()))
-                .map(doc -> {
-                    doc.setTitle(title);
-                    doc.setUpdatedAt(Instant.now());
-                    return documentRepository.save(doc);
-                });
-    }
-
     public boolean deleteDocument(UUID id, UUID ownerId) {
         return documentRepository.findById(id)
                 .filter(doc -> ownerId.equals(doc.getOwnerId()))
@@ -96,9 +81,4 @@ public class DocumentService {
             });
     }
 
-    public boolean isOwner(UUID docId, UUID ownerId) {
-        return documentRepository.findById(docId)
-                .map(doc -> ownerId.equals(doc.getOwnerId()))
-                .orElse(false);
-    }
 }
