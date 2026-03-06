@@ -46,11 +46,25 @@ public class PermissionService {
     }
 
     public List<SharedDocumentResponse> getSharedDocuments(UUID userId) {
-        return permissionRepository.findByUserId(userId).stream()
-            .map(dp -> documentRepository.findById(dp.getDocumentId())
-                .map(doc -> new SharedDocumentResponse(doc.getId(), doc.getTitle(), dp.getPermission().name()))
-                .orElse(null))
-            .filter(Objects::nonNull)
-            .toList();
+        List<DocumentPermission> directPerms = permissionRepository.findByUserId(userId);
+        List<SharedDocumentResponse> result = new java.util.ArrayList<>();
+
+        for (DocumentPermission dp : directPerms) {
+            documentRepository.findById(dp.getDocumentId()).ifPresent(doc -> {
+                result.add(new SharedDocumentResponse(doc.getId(), doc.getTitle(), dp.getPermission().name()));
+                // Add children recursively
+                addChildDocuments(doc.getId(), dp.getPermission().name(), result);
+            });
+        }
+
+        return result;
+    }
+
+    private void addChildDocuments(UUID parentId, String permission, List<SharedDocumentResponse> result) {
+        List<com.collabdoc.document.Document> children = documentRepository.findByParentIdOrderBySortOrderAsc(parentId);
+        for (var child : children) {
+            result.add(new SharedDocumentResponse(child.getId(), child.getTitle(), permission));
+            addChildDocuments(child.getId(), permission, result);
+        }
     }
 }

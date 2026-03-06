@@ -124,18 +124,23 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
                 byte[] response = YjsSyncProtocol.encodeSyncStep2(diff);
                 sendToSession(session, response);
             }
-            case YjsSyncProtocol.MSG_SYNC_STEP2, YjsSyncProtocol.MSG_SYNC_UPDATE -> {
+            case YjsSyncProtocol.MSG_SYNC_STEP2 -> {
+                // Allow all users (including viewers) to receive state
+                byte[] update = YjsSyncProtocol.readPayload(buf);
+                docManager.applyClientUpdate(docId, update);
+                // Don't broadcast STEP2 — it's part of initial sync handshake
+            }
+            case YjsSyncProtocol.MSG_SYNC_UPDATE -> {
+                // Only owners and editors can send updates
                 String perm = (String) session.getAttributes().get("permission");
                 if (!"OWNER".equals(perm) && !"EDITOR".equals(perm)) {
                     log.debug("Dropping update from viewer session={}", session.getId());
                     return;
                 }
-                // Client sends an update; apply and broadcast
-                byte[] update = YjsSyncProtocol.readPayload(buf);
-                byte[] applied = docManager.applyClientUpdate(docId, update);
+                byte[] updateData = YjsSyncProtocol.readPayload(buf);
+                byte[] applied = docManager.applyClientUpdate(docId, updateData);
                 if (applied != null) {
-                    // Broadcast the update to all OTHER clients
-                    byte[] broadcastMsg = YjsSyncProtocol.encodeSyncUpdate(update);
+                    byte[] broadcastMsg = YjsSyncProtocol.encodeSyncUpdate(updateData);
                     broadcastToOthers(docId, session, broadcastMsg);
                 }
             }

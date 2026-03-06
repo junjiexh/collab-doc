@@ -23,9 +23,18 @@ export default function EditorPage() {
 
   useEffect(() => {
     if (!docId) return;
+    setPermission(null);
     fetch(`/api/docs/${docId}`, { credentials: "include" })
-      .then(res => res.json())
-      .then(data => setPermission(data.permission ?? "OWNER"))
+      .then(res => {
+        if (!res.ok) {
+          setPermission(null);
+          return null;
+        }
+        return res.json();
+      })
+      .then(data => {
+        if (data) setPermission(data.permission ?? null);
+      })
       .catch(() => setPermission(null));
   }, [docId]);
 
@@ -101,12 +110,16 @@ export default function EditorPage() {
           pointer-events: none;
         }
       `}</style>
-      <CollaborativeEditor
-        docId={docId}
-        username={authUser!.username}
-        userId={authUser!.id}
-        editable={permission === "OWNER" || permission === "EDITOR"}
-      />
+      {permission ? (
+        <CollaborativeEditor
+          docId={docId}
+          username={authUser!.username}
+          userId={authUser!.id}
+          editable={permission === "OWNER" || permission === "EDITOR"}
+        />
+      ) : (
+        <div style={{ padding: 24, color: "#888" }}>Loading...</div>
+      )}
     </div>
     {showShare && docId && (
       <ShareDialog docId={docId} onClose={() => setShowShare(false)} />
