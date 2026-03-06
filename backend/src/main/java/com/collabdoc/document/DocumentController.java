@@ -1,11 +1,11 @@
 package com.collabdoc.document;
 
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -29,20 +29,19 @@ public class DocumentController {
     }
 
     @PostMapping
-    public Document createDocument(@AuthenticationPrincipal UUID userId, @RequestBody Map<String, String> body) {
-        String title = body.getOrDefault("title", "Untitled");
-        String parentIdStr = body.get("parentId");
-        UUID parentId = parentIdStr != null ? UUID.fromString(parentIdStr) : null;
+    public Document createDocument(@AuthenticationPrincipal UUID userId,
+                                   @Valid @RequestBody CreateDocumentRequest request) {
+        String title = request.title() != null ? request.title() : "Untitled";
+        UUID parentId = request.parentId() != null ? UUID.fromString(request.parentId()) : null;
         return documentService.createDocument(title, parentId, userId);
     }
 
     @PutMapping("/{id}/move")
     public ResponseEntity<Document> moveDocument(@AuthenticationPrincipal UUID userId,
-                                                  @PathVariable UUID id, @RequestBody Map<String, Object> body) {
-        String parentIdStr = (String) body.get("parentId");
-        UUID parentId = parentIdStr != null ? UUID.fromString(parentIdStr) : null;
-        int sortOrder = (int) body.get("sortOrder");
-        return documentService.moveDocument(id, parentId, sortOrder, userId)
+                                                  @PathVariable UUID id,
+                                                  @Valid @RequestBody MoveDocumentRequest request) {
+        UUID parentId = request.parentId() != null ? UUID.fromString(request.parentId()) : null;
+        return documentService.moveDocument(id, parentId, request.sortOrder(), userId)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());
     }
@@ -56,9 +55,9 @@ public class DocumentController {
 
     @PutMapping("/{id}")
     public ResponseEntity<Document> updateDocument(@AuthenticationPrincipal UUID userId,
-                                                    @PathVariable UUID id, @RequestBody Map<String, String> body) {
-        String title = body.get("title");
-        return documentService.updateTitle(id, title, userId)
+                                                    @PathVariable UUID id,
+                                                    @Valid @RequestBody UpdateDocumentRequest request) {
+        return documentService.updateTitle(id, request.title(), userId)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());
     }

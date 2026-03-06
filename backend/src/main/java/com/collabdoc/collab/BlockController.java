@@ -1,6 +1,8 @@
 package com.collabdoc.collab;
 
 import com.collabdoc.document.DocumentService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -15,11 +17,14 @@ public class BlockController {
     private final YrsDocumentManager docManager;
     private final YjsWebSocketHandler wsHandler;
     private final DocumentService documentService;
+    private final ObjectMapper objectMapper;
 
-    public BlockController(YrsDocumentManager docManager, YjsWebSocketHandler wsHandler, DocumentService documentService) {
+    public BlockController(YrsDocumentManager docManager, YjsWebSocketHandler wsHandler,
+                           DocumentService documentService, ObjectMapper objectMapper) {
         this.docManager = docManager;
         this.wsHandler = wsHandler;
         this.documentService = documentService;
+        this.objectMapper = objectMapper;
     }
 
     /** Get document content as JSON string. */
@@ -37,18 +42,15 @@ public class BlockController {
     public ResponseEntity<?> insertBlock(
             @AuthenticationPrincipal UUID userId,
             @PathVariable UUID docId,
-            @RequestBody Map<String, Object> body) {
+            @Valid @RequestBody InsertBlockRequest request) {
         if (!documentService.isOwner(docId, userId)) {
             return ResponseEntity.status(403).body(Map.of("error", "Forbidden"));
         }
-        int index = ((Number) body.getOrDefault("index", 0)).intValue();
-        String blockType = (String) body.getOrDefault("type", "paragraph");
-        String content = (String) body.get("content");
-        String propsJson = body.containsKey("props")
-            ? new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(body.get("props")).toString()
+        String propsJson = request.props() != null
+            ? objectMapper.valueToTree(request.props()).toString()
             : null;
 
-        byte[] update = docManager.insertBlock(docId, index, blockType, content, propsJson);
+        byte[] update = docManager.insertBlock(docId, request.index(), request.type(), request.content(), propsJson);
         if (update != null) {
             wsHandler.broadcastUpdate(docId, update);
         }
