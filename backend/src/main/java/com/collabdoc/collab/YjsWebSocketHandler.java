@@ -1,6 +1,6 @@
 package com.collabdoc.collab;
 
-import com.collabdoc.document.DocumentService;
+import com.collabdoc.permission.PermissionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.socket.*;
@@ -21,7 +21,7 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
     private static final Logger log = LoggerFactory.getLogger(YjsWebSocketHandler.class);
 
     private final YrsDocumentManager docManager;
-    private final DocumentService documentService;
+    private final PermissionService permissionService;
 
     private static final int SEND_TIME_LIMIT = 5000;   // 5 seconds
     private static final int SEND_BUFFER_LIMIT = 512 * 1024; // 512 KB
@@ -33,15 +33,9 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
     // sessionId -> decorated session (for thread-safe sends)
     private final ConcurrentHashMap<String, WebSocketSession> decoratedSessions = new ConcurrentHashMap<>();
 
-    // Keep original constructor for backward compatibility
-    public YjsWebSocketHandler(YrsDocumentManager docManager) {
+    public YjsWebSocketHandler(YrsDocumentManager docManager, PermissionService permissionService) {
         this.docManager = docManager;
-        this.documentService = null;
-    }
-
-    public YjsWebSocketHandler(YrsDocumentManager docManager, DocumentService documentService) {
-        this.docManager = docManager;
-        this.documentService = documentService;
+        this.permissionService = permissionService;
     }
 
     @Override
@@ -58,13 +52,21 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
             return;
         }
 
-        // Verify ownership
+        // Verify permission
         UUID userId = (UUID) session.getAttributes().get("userId");
-        if (userId == null || (documentService != null && !documentService.isOwner(docId, userId))) {
+        if (userId == null) {
+            try { session.close(); } catch (IOException ignored) {}
+            return;
+        }
+
+        String permission = permissionService != null ? permissionService.resolvePermission(docId, userId) : null;
+        if (permission == null) {
             log.warn("Unauthorized WebSocket access: user={}, doc={}", userId, docId);
             try { session.close(); } catch (IOException ignored) {}
             return;
         }
+
+        session.getAttributes().put("permission", permission);
 
         // Ensure document is loaded in memory
         docManager.getOrLoadDocument(docId);
@@ -77,7 +79,7 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
         sessionDocs.put(session.getId(), docId);
         decoratedSessions.put(session.getId(), decorated);
 
-        log.info("WebSocket connected: session={}, doc={}", session.getId(), docId);
+        log.info("WebSocket connected: session={}, doc={}, permission={}", session.getId(), docId, permission);
 
         // Send sync step 1 (server's state vector) to the client
         try {
@@ -123,6 +125,11 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
                 sendToSession(session, response);
             }
             case YjsSyncProtocol.MSG_SYNC_STEP2, YjsSyncProtocol.MSG_SYNC_UPDATE -> {
+                String perm = (String) session.getAttributes().get("permission");
+                if (!"OWNER".equals(perm) && !"EDITOR".equals(perm)) {
+                    log.debug("Dropping update from viewer session={}", session.getId());
+                    return;
+                }
                 // Client sends an update; apply and broadcast
                 byte[] update = YjsSyncProtocol.readPayload(buf);
                 byte[] applied = docManager.applyClientUpdate(docId, update);

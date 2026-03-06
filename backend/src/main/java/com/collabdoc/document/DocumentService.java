@@ -83,6 +83,19 @@ public class DocumentService {
                 .orElse(false);
     }
 
+    public Optional<Document> getDocumentById(UUID id) {
+        return documentRepository.findById(id);
+    }
+
+    public Optional<Document> updateTitle(UUID id, String title) {
+        return documentRepository.findById(id)
+            .map(doc -> {
+                doc.setTitle(title);
+                doc.setUpdatedAt(Instant.now());
+                return documentRepository.save(doc);
+            });
+    }
+
     public boolean isOwner(UUID docId, UUID ownerId) {
         return documentRepository.findById(docId)
                 .map(doc -> ownerId.equals(doc.getOwnerId()))

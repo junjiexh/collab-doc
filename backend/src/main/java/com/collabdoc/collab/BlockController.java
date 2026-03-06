@@ -1,6 +1,6 @@
 package com.collabdoc.collab;
 
-import com.collabdoc.document.DocumentService;
+import com.collabdoc.permission.PermissionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -16,21 +16,21 @@ public class BlockController {
 
     private final YrsDocumentManager docManager;
     private final YjsWebSocketHandler wsHandler;
-    private final DocumentService documentService;
+    private final PermissionService permissionService;
     private final ObjectMapper objectMapper;
 
     public BlockController(YrsDocumentManager docManager, YjsWebSocketHandler wsHandler,
-                           DocumentService documentService, ObjectMapper objectMapper) {
+                           PermissionService permissionService, ObjectMapper objectMapper) {
         this.docManager = docManager;
         this.wsHandler = wsHandler;
-        this.documentService = documentService;
+        this.permissionService = permissionService;
         this.objectMapper = objectMapper;
     }
 
     /** Get document content as JSON string. */
     @GetMapping
     public ResponseEntity<?> getBlocks(@AuthenticationPrincipal UUID userId, @PathVariable UUID docId) {
-        if (!documentService.isOwner(docId, userId)) {
+        if (!permissionService.canView(docId, userId)) {
             return ResponseEntity.status(403).body(Map.of("error", "Forbidden"));
         }
         String json = docManager.getBlocksJson(docId);
@@ -43,7 +43,7 @@ public class BlockController {
             @AuthenticationPrincipal UUID userId,
             @PathVariable UUID docId,
             @Valid @RequestBody InsertBlockRequest request) {
-        if (!documentService.isOwner(docId, userId)) {
+        if (!permissionService.canEdit(docId, userId)) {
             return ResponseEntity.status(403).body(Map.of("error", "Forbidden"));
         }
         String propsJson = request.props() != null
@@ -63,7 +63,7 @@ public class BlockController {
             @AuthenticationPrincipal UUID userId,
             @PathVariable UUID docId,
             @PathVariable int index) {
-        if (!documentService.isOwner(docId, userId)) {
+        if (!permissionService.canEdit(docId, userId)) {
             return ResponseEntity.status(403).body(Map.of("error", "Forbidden"));
         }
         byte[] update = docManager.deleteBlock(docId, index);

@@ -1,7 +1,7 @@
 package com.collabdoc.config;
 
 import com.collabdoc.auth.JwtUtil;
-import com.collabdoc.document.DocumentService;
+import com.collabdoc.permission.PermissionService;
 import com.collabdoc.collab.YrsDocumentManager;
 import com.collabdoc.collab.YjsWebSocketHandler;
 import jakarta.servlet.http.Cookie;
@@ -26,17 +26,17 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     private final YrsDocumentManager docManager;
     private final JwtUtil jwtUtil;
-    private final DocumentService documentService;
+    private final PermissionService permissionService;
 
-    public WebSocketConfig(YrsDocumentManager docManager, JwtUtil jwtUtil, DocumentService documentService) {
+    public WebSocketConfig(YrsDocumentManager docManager, JwtUtil jwtUtil, PermissionService permissionService) {
         this.docManager = docManager;
         this.jwtUtil = jwtUtil;
-        this.documentService = documentService;
+        this.permissionService = permissionService;
     }
 
     @Bean
     public YjsWebSocketHandler yjsWebSocketHandler() {
-        return new YjsWebSocketHandler(docManager, documentService);
+        return new YjsWebSocketHandler(docManager, permissionService);
     }
 
     @Override

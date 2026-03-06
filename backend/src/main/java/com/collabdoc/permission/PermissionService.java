@@ -3,6 +3,8 @@ package com.collabdoc.permission;
 import com.collabdoc.document.DocumentRepository;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -41,5 +43,14 @@ public class PermissionService {
 
     public boolean isOwner(UUID docId, UUID userId) {
         return "OWNER".equals(resolvePermission(docId, userId));
+    }
+
+    public List<SharedDocumentResponse> getSharedDocuments(UUID userId) {
+        return permissionRepository.findByUserId(userId).stream()
+            .map(dp -> documentRepository.findById(dp.getDocumentId())
+                .map(doc -> new SharedDocumentResponse(doc.getId(), doc.getTitle(), dp.getPermission().name()))
+                .orElse(null))
+            .filter(Objects::nonNull)
+            .toList();
     }
 }
