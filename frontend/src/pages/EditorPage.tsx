@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useOutletContext } from "react-router-dom";
 import CollaborativeEditor from "../components/CollaborativeEditor";
+import ShareDialog from "../components/ShareDialog";
 import { useAuth } from "../contexts/AuthContext";
 import { findNodeById, type TreeNode } from "../utils/tree";
 
@@ -15,8 +16,18 @@ export default function EditorPage() {
   const { user: authUser } = useAuth();
   const titleRef = useRef<HTMLDivElement>(null);
   const lastSavedTitle = useRef("");
+  const [permission, setPermission] = useState<string | null>(null);
+  const [showShare, setShowShare] = useState(false);
 
   const node = docId ? findNodeById(tree, docId) : null;
+
+  useEffect(() => {
+    if (!docId) return;
+    fetch(`/api/docs/${docId}`, { credentials: "include" })
+      .then(res => res.json())
+      .then(data => setPermission(data.permission ?? "OWNER"))
+      .catch(() => setPermission(null));
+  }, [docId]);
 
   // Sync displayed title when docId or external tree changes
   useEffect(() => {
@@ -51,10 +62,24 @@ export default function EditorPage() {
   if (!docId) return <p>No document ID</p>;
 
   return (
+    <>
     <div style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
+      {permission === "OWNER" && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <button
+            onClick={() => setShowShare(true)}
+            style={{
+              padding: "4px 12px", backgroundColor: "#2383e2", color: "#fff",
+              border: "none", borderRadius: 4, cursor: "pointer", fontSize: 13,
+            }}
+          >
+            Share
+          </button>
+        </div>
+      )}
       <div
         ref={titleRef}
-        contentEditable
+        contentEditable={permission === "OWNER" || permission === "EDITOR"}
         suppressContentEditableWarning
         onBlur={saveTitle}
         onKeyDown={handleKeyDown}
@@ -76,7 +101,16 @@ export default function EditorPage() {
           pointer-events: none;
         }
       `}</style>
-      <CollaborativeEditor docId={docId} username={authUser!.username} userId={authUser!.id} />
+      <CollaborativeEditor
+        docId={docId}
+        username={authUser!.username}
+        userId={authUser!.id}
+        editable={permission === "OWNER" || permission === "EDITOR"}
+      />
     </div>
+    {showShare && docId && (
+      <ShareDialog docId={docId} onClose={() => setShowShare(false)} />
+    )}
+    </>
   );
 }

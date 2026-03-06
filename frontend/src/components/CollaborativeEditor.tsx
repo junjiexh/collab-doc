@@ -9,12 +9,14 @@ interface CollaborativeEditorProps {
   docId: string;
   username: string;
   userId: string;
+  editable: boolean;
 }
 
 export default function CollaborativeEditor({
   docId,
   username,
   userId,
+  editable,
 }: CollaborativeEditorProps) {
   const { provider, fragment, user, synced } = useCollaboration(docId, username, userId);
 
@@ -23,7 +25,7 @@ export default function CollaborativeEditor({
   }
 
   return (
-    <BlockNoteEditor provider={provider} fragment={fragment} user={user} />
+    <BlockNoteEditor provider={provider} fragment={fragment} user={user} editable={editable} />
   );
 }
 
@@ -31,10 +33,12 @@ function BlockNoteEditor({
   provider,
   fragment,
   user,
+  editable,
 }: {
   provider: WebsocketProvider;
   fragment: Y.XmlFragment;
   user: { name: string; color: string };
+  editable: boolean;
 }) {
   const editor = useCreateBlockNote({
     collaboration: {
@@ -46,7 +50,7 @@ function BlockNoteEditor({
 
   return (
     <div style={{ minHeight: "70vh" }}>
-      <BlockNoteView editor={editor} />
+      <BlockNoteView editor={editor} editable={editable} />
     </div>
   );
 }

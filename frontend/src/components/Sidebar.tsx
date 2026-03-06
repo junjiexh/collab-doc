@@ -1,6 +1,8 @@
 import "./Sidebar.css";
 import DocumentTree from "./DocumentTree";
+import SharedDocuments from "./SharedDocuments";
 import type { TreeNode } from "../utils/tree";
+import type { SharedDocument } from "../api";
 
 interface SidebarProps {
   tree: TreeNode[];
@@ -10,6 +12,7 @@ interface SidebarProps {
   onCreateRoot: () => void;
   onDelete: (id: string) => void;
   onMove: (id: string, newParentId: string | null, newIndex: number) => void;
+  sharedDocuments: SharedDocument[];
 }
 
 export default function Sidebar({
@@ -20,6 +23,7 @@ export default function Sidebar({
   onCreateRoot,
   onDelete,
   onMove,
+  sharedDocuments,
 }: SidebarProps) {
   return (
     <div
@@ -63,6 +67,8 @@ export default function Sidebar({
           />
         )}
       </div>
+
+      <SharedDocuments documents={sharedDocuments} />
 
       <div style={{ padding: "8px 12px", borderTop: "1px solid #e8e8e8" }}>
         <button

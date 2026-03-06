@@ -7,6 +7,7 @@ export interface DocumentMeta {
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
+  permission?: string;
 }
 
 export interface AuthUser {
@@ -100,5 +101,64 @@ export async function moveDocument(id: string, parentId: string | null, sortOrde
     credentials: "include",
     body: JSON.stringify({ parentId, sortOrder }),
   });
+  return res.json();
+}
+
+// --- Permission API ---
+
+export interface PermissionEntry {
+  id: string;
+  userId: string;
+  username: string;
+  permission: "VIEWER" | "EDITOR";
+}
+
+export interface SharedDocument {
+  id: string;
+  title: string;
+  permission: string;
+}
+
+export async function listPermissions(docId: string): Promise<PermissionEntry[]> {
+  const res = await fetch(`${API_BASE}/docs/${docId}/permissions`, { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to list permissions");
+  return res.json();
+}
+
+export async function addPermission(docId: string, username: string, permission: "VIEWER" | "EDITOR"): Promise<PermissionEntry> {
+  const res = await fetch(`${API_BASE}/docs/${docId}/permissions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ username, permission }),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error || "Failed to add permission");
+  }
+  return res.json();
+}
+
+export async function updatePermission(docId: string, permissionId: string, permission: "VIEWER" | "EDITOR"): Promise<PermissionEntry> {
+  const res = await fetch(`${API_BASE}/docs/${docId}/permissions/${permissionId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ permission }),
+  });
+  if (!res.ok) throw new Error("Failed to update permission");
+  return res.json();
+}
+
+export async function deletePermission(docId: string, permissionId: string): Promise<void> {
+  await fetch(`${API_BASE}/docs/${docId}/permissions/${permissionId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+}
+
+export async function fetchSharedWithMe(): Promise<SharedDocument[]> {
+  const res = await fetch(`${API_BASE}/docs/shared-with-me`, { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch shared documents");
   return res.json();
 }

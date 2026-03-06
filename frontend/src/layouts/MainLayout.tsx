@@ -8,6 +8,8 @@ import {
   deleteDocument,
   moveDocument as apiMoveDocument,
   renameDocument,
+  fetchSharedWithMe,
+  type SharedDocument,
 } from "../api";
 import { buildTree, isAncestor, type TreeNode } from "../utils/tree";
 
@@ -30,6 +32,7 @@ export default function MainLayout() {
   const { user, logout } = useAuth();
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(loadExpandedIds);
+  const [sharedDocs, setSharedDocs] = useState<SharedDocument[]>([]);
   const navigate = useNavigate();
   const { docId } = useParams<{ docId: string }>();
 
@@ -38,9 +41,18 @@ export default function MainLayout() {
     setTree(buildTree(docs));
   }, []);
 
+  const refreshShared = useCallback(async () => {
+    const docs = await fetchSharedWithMe();
+    setSharedDocs(docs);
+  }, []);
+
   useEffect(() => {
     refreshTree();
   }, [refreshTree]);
+
+  useEffect(() => {
+    refreshShared();
+  }, [refreshShared]);
 
   const handleToggle = useCallback((id: string) => {
     setExpandedIds((prev) => {
@@ -124,6 +136,7 @@ export default function MainLayout() {
           onCreateRoot={handleCreateRoot}
           onDelete={handleDelete}
           onMove={handleMove}
+          sharedDocuments={sharedDocs}
         />
         <div style={{ padding: "8px 12px", borderTop: "1px solid #e5e5e5", fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ color: "#666" }}>{user?.username}</span>
