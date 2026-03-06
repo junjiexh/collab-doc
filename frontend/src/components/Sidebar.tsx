@@ -30,7 +30,7 @@ export default function Sidebar({
       style={{
         width: 260,
         minWidth: 200,
-        height: "100vh",
+        flex: 1,
         borderRight: "1px solid #e8e8e8",
         display: "flex",
         flexDirection: "column",
