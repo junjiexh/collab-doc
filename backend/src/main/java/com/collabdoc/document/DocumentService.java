@@ -1,6 +1,7 @@
 package com.collabdoc.document;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
@@ -33,6 +34,7 @@ public class DocumentService {
         return documentRepository.findByOwnerIdOrderBySortOrderAsc(ownerId);
     }
 
+    @Transactional
     public Optional<Document> moveDocument(UUID id, UUID newParentId, int targetIndex, UUID ownerId) {
         return documentRepository.findById(id)
                 .filter(doc -> ownerId.equals(doc.getOwnerId()))
