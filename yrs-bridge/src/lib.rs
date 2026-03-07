@@ -307,7 +307,7 @@ pub extern "C" fn yrs_doc_insert_block(
 
         // Create blockContainer with required BlockNote attributes
         let container = block_group.insert(&mut txn, safe_index, XmlElementPrelim::empty("blockContainer"));
-        let block_id = format!("agent-{:08x}", rand_u32());
+        let block_id = uuid::Uuid::new_v4().to_string();
         container.insert_attribute(&mut txn, Arc::<str>::from("id"), block_id);
         container.insert_attribute(&mut txn, Arc::<str>::from("backgroundColor"), "default".to_string());
         container.insert_attribute(&mut txn, Arc::<str>::from("textColor"), "default".to_string());
@@ -418,14 +418,6 @@ pub extern "C" fn yrs_free_string(ptr: *mut c_char) {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-/// Simple pseudo-random u32 for generating block IDs (no external dep needed).
-fn rand_u32() -> u32 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let t = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
-    // Mix nanos and secs for decent uniqueness
-    (t.as_nanos() as u32).wrapping_mul(2654435761)
-}
 
 /// Move a `Vec<u8>` onto the heap and return a raw pointer + length.
 /// The caller is responsible for freeing via `yrs_free_bytes`.
