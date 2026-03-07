@@ -9,9 +9,9 @@ test("agent block insert is visible in browser", async ({ page }) => {
   });
   const { id: docId } = await createRes.json();
 
-  // Agent inserts a block via REST API
+  // Agent inserts a block via REST API (new v2 format)
   await page.request.post(`${API_BASE}/docs/${docId}/blocks`, {
-    data: { index: 0, type: "paragraph", content: "Nova test block" },
+    data: { type: "paragraph", content: "Nova test block", position: "end" },
   });
 
   // Open the document in the browser

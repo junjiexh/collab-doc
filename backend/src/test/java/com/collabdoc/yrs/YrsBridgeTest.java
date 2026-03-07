@@ -164,6 +164,89 @@ class YrsBridgeTest {
     }
 
     @Test
+    @Order(9)
+    void getBlockById() {
+        try (YrsDocument doc = bridge.createDocument()) {
+            doc.insertBlock(0, "paragraph", "Find me", null);
+            String allBlocks = doc.getBlocksJson();
+            assertTrue(allBlocks.contains("\"id\""));
+
+            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            var blocks = mapper.readTree(allBlocks);
+            String blockId = blocks.get(0).get("children").get(0).get("props").get("id").asText();
+
+            String block = doc.getBlockById(blockId);
+            assertNotNull(block, "Should find block by ID");
+            assertTrue(block.contains("Find me"));
+
+            assertNull(doc.getBlockById("nonexistent-id"));
+        } catch (Exception e) {
+            fail("Unexpected exception: " + e.getMessage());
+        }
+    }
+
+    @Test
+    @Order(10)
+    void updateBlock() {
+        try (YrsDocument doc = bridge.createDocument()) {
+            doc.insertBlock(0, "paragraph", "Original", null);
+
+            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            var blocks = mapper.readTree(doc.getBlocksJson());
+            String blockId = blocks.get(0).get("children").get(0).get("props").get("id").asText();
+
+            byte[] update = doc.updateBlock(blockId, null, "Updated content", null);
+            assertNotNull(update);
+
+            String json = doc.getBlocksJson();
+            assertTrue(json.contains("Updated content"));
+            assertFalse(json.contains("Original"));
+        } catch (Exception e) {
+            fail("Unexpected exception: " + e.getMessage());
+        }
+    }
+
+    @Test
+    @Order(11)
+    void deleteBlockById() {
+        try (YrsDocument doc = bridge.createDocument()) {
+            doc.insertBlock(0, "paragraph", "Keep", null);
+            doc.insertBlock(1, "paragraph", "Delete", null);
+
+            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            var blocks = mapper.readTree(doc.getBlocksJson());
+            String deleteId = blocks.get(0).get("children").get(1).get("props").get("id").asText();
+
+            byte[] update = doc.deleteBlockById(deleteId);
+            assertNotNull(update);
+
+            String json = doc.getBlocksJson();
+            assertTrue(json.contains("Keep"));
+            assertFalse(json.contains("Delete"));
+        } catch (Exception e) {
+            fail("Unexpected exception: " + e.getMessage());
+        }
+    }
+
+    @Test
+    @Order(12)
+    void insertBlockV2WithPositions() {
+        try (YrsDocument doc = bridge.createDocument()) {
+            // Insert at end
+            doc.insertBlockV2("paragraph", "A", null, "end", null);
+            doc.insertBlockV2("paragraph", "B", null, "end", null);
+
+            // Insert at start
+            doc.insertBlockV2("paragraph", "C", null, "start", null);
+
+            // Verify order: C, A, B
+            String json = doc.getBlocksJson();
+            assertTrue(json.indexOf("C") < json.indexOf("A"));
+            assertTrue(json.indexOf("A") < json.indexOf("B"));
+        }
+    }
+
+    @Test
     @Order(8)
     void applyUpdateReturnsNullForInvalidData() {
         try (YrsDocument doc = bridge.createDocument()) {
