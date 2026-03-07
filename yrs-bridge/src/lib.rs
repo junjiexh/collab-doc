@@ -776,6 +776,41 @@ pub extern "C" fn yrs_doc_insert_block_v2(
     into_byte_ptr(diff, out_len)
 }
 
+/// Get a single block by index in the blockGroup. Returns JSON string.
+/// Caller must free via `yrs_free_string`. Returns null if out of bounds.
+#[no_mangle]
+pub extern "C" fn yrs_doc_get_block_at_index(doc: *const YrsDoc, index: u32) -> *mut c_char {
+    if doc.is_null() {
+        return ptr::null_mut();
+    }
+    let doc = unsafe { &*doc };
+    let mut txn = doc.doc.transact_mut();
+    let fragment = txn.get_or_insert_xml_fragment(FRAGMENT_NAME);
+    if fragment.len(&txn) == 0 {
+        return ptr::null_mut();
+    }
+    let block_group = match fragment.get(&txn, 0) {
+        Some(yrs::XmlOut::Element(bg)) if bg.tag().as_ref() == "blockGroup" => bg,
+        _ => return ptr::null_mut(),
+    };
+    if index >= block_group.len(&txn) {
+        return ptr::null_mut();
+    }
+    match block_group.get(&txn, index) {
+        Some(ref child) => {
+            let json = xml_out_to_json(child, &txn);
+            match serde_json::to_string(&json) {
+                Ok(s) => match CString::new(s) {
+                    Ok(c) => c.into_raw(),
+                    Err(_) => ptr::null_mut(),
+                },
+                Err(_) => ptr::null_mut(),
+            }
+        }
+        None => ptr::null_mut(),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Memory management
 // ---------------------------------------------------------------------------
@@ -1291,6 +1326,29 @@ mod tests {
         assert_eq!(get_text(&containers[2]), "D");
         assert_eq!(get_text(&containers[3]), "B");
         yrs_free_string(json);
+
+        yrs_doc_destroy(doc);
+    }
+
+    #[test]
+    fn test_get_block_at_index() {
+        let doc = yrs_doc_new();
+        let tag = CString::new("paragraph").unwrap();
+        let content = CString::new("Hello").unwrap();
+        let mut len: u32 = 0;
+        let u = yrs_doc_insert_block(doc, 0, tag.as_ptr(), content.as_ptr(), ptr::null(), &mut len);
+        yrs_free_bytes(u, len);
+
+        let result = yrs_doc_get_block_at_index(doc, 0);
+        assert!(!result.is_null());
+        let json_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
+        assert!(json_str.contains("paragraph"));
+        assert!(json_str.contains("Hello"));
+        yrs_free_string(result);
+
+        // Out of bounds
+        let bad = yrs_doc_get_block_at_index(doc, 99);
+        assert!(bad.is_null());
 
         yrs_doc_destroy(doc);
     }
