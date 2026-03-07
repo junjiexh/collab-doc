@@ -269,6 +269,163 @@ pub extern "C" fn yrs_doc_get_block_by_id(doc: *const YrsDoc, block_id: *const c
     ptr::null_mut()
 }
 
+/// Update a block identified by its ID. Supports partial update:
+/// - `new_type`: if non-null, changes the block's content element type (e.g. paragraph -> heading)
+/// - `new_content`: if non-null, replaces the block's text content
+/// - `new_props_json`: if non-null, merges new properties into the content element's attributes
+///
+/// Returns update bytes (diff) for broadcasting. Caller must free via `yrs_free_bytes`.
+/// Returns null if block not found or on error.
+#[no_mangle]
+pub extern "C" fn yrs_doc_update_block(
+    doc: *mut YrsDoc,
+    block_id: *const c_char,
+    new_type: *const c_char,
+    new_content: *const c_char,
+    new_props_json: *const c_char,
+    out_len: *mut u32,
+) -> *mut u8 {
+    if doc.is_null() || block_id.is_null() || out_len.is_null() {
+        return ptr::null_mut();
+    }
+    let doc = unsafe { &mut *doc };
+    let target_id = match unsafe { CStr::from_ptr(block_id) }.to_str() {
+        Ok(s) => s,
+        Err(_) => return ptr::null_mut(),
+    };
+
+    let type_change = if new_type.is_null() {
+        None
+    } else {
+        match unsafe { CStr::from_ptr(new_type) }.to_str() {
+            Ok(s) => Some(s.to_string()),
+            Err(_) => return ptr::null_mut(),
+        }
+    };
+
+    let content_change = if new_content.is_null() {
+        None
+    } else {
+        match unsafe { CStr::from_ptr(new_content) }.to_str() {
+            Ok(s) => Some(s.to_string()),
+            Err(_) => return ptr::null_mut(),
+        }
+    };
+
+    let props_change: Option<HashMap<String, String>> = if new_props_json.is_null() {
+        None
+    } else {
+        match unsafe { CStr::from_ptr(new_props_json) }.to_str() {
+            Ok(s) if !s.is_empty() => Some(serde_json::from_str(s).unwrap_or_default()),
+            _ => None,
+        }
+    };
+
+    // Capture state vector before mutation
+    let sv_before = {
+        let txn = doc.doc.transact();
+        txn.state_vector()
+    };
+
+    {
+        let mut txn = doc.doc.transact_mut();
+        let fragment = txn.get_or_insert_xml_fragment(FRAGMENT_NAME);
+        if fragment.len(&txn) == 0 {
+            return ptr::null_mut();
+        }
+        let block_group = match fragment.get(&txn, 0) {
+            Some(yrs::XmlOut::Element(bg)) if bg.tag().as_ref() == "blockGroup" => bg,
+            _ => return ptr::null_mut(),
+        };
+
+        // Find the blockContainer with matching ID
+        let mut found_index = None;
+        for i in 0..block_group.len(&txn) {
+            if let Some(yrs::XmlOut::Element(container)) = block_group.get(&txn, i) {
+                if let Some(id) = container.get_attribute(&txn, "id") {
+                    if id == target_id {
+                        found_index = Some(i);
+                        break;
+                    }
+                }
+            }
+        }
+
+        let container_index = match found_index {
+            Some(i) => i,
+            None => return ptr::null_mut(),
+        };
+
+        let container = match block_group.get(&txn, container_index) {
+            Some(yrs::XmlOut::Element(c)) => c,
+            _ => return ptr::null_mut(),
+        };
+
+        if type_change.is_some() {
+            // Type change requires replacing the content element
+            let old_content_text = if let Some(yrs::XmlOut::Element(old_elem)) = container.get(&txn, 0) {
+                if let Some(yrs::XmlOut::Text(txt)) = old_elem.get(&txn, 0) {
+                    txt.get_string(&txn)
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            };
+
+            // Remove old content element
+            container.remove_range(&mut txn, 0, 1);
+
+            // Create new content element with new type
+            let new_tag = type_change.as_ref().unwrap();
+            let new_elem = container.insert(&mut txn, 0, XmlElementPrelim::empty(&**new_tag));
+            new_elem.insert_attribute(&mut txn, Arc::<str>::from("textAlignment"), "left".to_string());
+
+            // Apply props
+            if let Some(ref props) = props_change {
+                for (key, value) in props {
+                    new_elem.insert_attribute(&mut txn, Arc::<str>::from(key.as_str()), value.clone());
+                }
+            }
+
+            // Set content: use new content if provided, otherwise preserve old
+            let final_content = content_change.as_deref().unwrap_or(&old_content_text);
+            let xml_text = new_elem.insert(&mut txn, 0, XmlTextPrelim::new(""));
+            if !final_content.is_empty() {
+                xml_text.insert(&mut txn, 0, final_content);
+            }
+        } else {
+            // No type change — modify content element in place
+            if let Some(yrs::XmlOut::Element(elem)) = container.get(&txn, 0) {
+                // Update props if provided
+                if let Some(ref props) = props_change {
+                    for (key, value) in props {
+                        elem.insert_attribute(&mut txn, Arc::<str>::from(key.as_str()), value.clone());
+                    }
+                }
+
+                // Update content if provided
+                if let Some(ref new_text) = content_change {
+                    // Remove old XmlText and create new one
+                    if elem.len(&txn) > 0 {
+                        elem.remove_range(&mut txn, 0, 1);
+                    }
+                    let xml_text = elem.insert(&mut txn, 0, XmlTextPrelim::new(""));
+                    if !new_text.is_empty() {
+                        xml_text.insert(&mut txn, 0, &**new_text);
+                    }
+                }
+            } else {
+                return ptr::null_mut();
+            }
+        }
+    }
+
+    let txn = doc.doc.transact();
+    let diff = txn.encode_diff_v1(&sv_before);
+    into_byte_ptr(diff, out_len)
+}
+
 /// Insert a new block at the given index in the document's XmlFragment.
 /// - `block_type`: the XML tag name (e.g. "paragraph", "heading")
 /// - `content`: text content for the block
@@ -784,6 +941,69 @@ mod tests {
         let bad_id = CString::new("nonexistent-id").unwrap();
         let not_found = yrs_doc_get_block_by_id(doc, bad_id.as_ptr());
         assert!(not_found.is_null());
+
+        yrs_doc_destroy(doc);
+    }
+
+    #[test]
+    fn test_update_block() {
+        let doc = yrs_doc_new();
+
+        // Insert a paragraph block
+        let tag = CString::new("paragraph").unwrap();
+        let content = CString::new("Original text").unwrap();
+        let mut len: u32 = 0;
+        let update = yrs_doc_insert_block(doc, 0, tag.as_ptr(), content.as_ptr(), ptr::null(), &mut len);
+        yrs_free_bytes(update, len);
+
+        // Get the block ID
+        let json = yrs_doc_get_blocks_json(doc);
+        let json_str = unsafe { CStr::from_ptr(json) }.to_str().unwrap();
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(json_str).unwrap();
+        let containers = parsed[0]["children"].as_array().unwrap();
+        let block_id = containers[0]["props"]["id"].as_str().unwrap().to_string();
+        yrs_free_string(json);
+
+        // Update content
+        let id_cstr = CString::new(block_id.as_str()).unwrap();
+        let new_content = CString::new("Updated text").unwrap();
+        let mut update_len: u32 = 0;
+        let result = yrs_doc_update_block(
+            doc, id_cstr.as_ptr(),
+            ptr::null(),        // no type change
+            new_content.as_ptr(),
+            ptr::null(),        // no props change
+            &mut update_len,
+        );
+        assert!(!result.is_null());
+        yrs_free_bytes(result, update_len);
+
+        // Verify updated content
+        let json = yrs_doc_get_blocks_json(doc);
+        let json_str = unsafe { CStr::from_ptr(json) }.to_str().unwrap();
+        assert!(json_str.contains("Updated text"));
+        assert!(!json_str.contains("Original text"));
+        yrs_free_string(json);
+
+        // Update type (paragraph -> heading) with props
+        let new_type = CString::new("heading").unwrap();
+        let new_props = CString::new(r#"{"level":"2"}"#).unwrap();
+        let mut update_len2: u32 = 0;
+        let result2 = yrs_doc_update_block(
+            doc, id_cstr.as_ptr(),
+            new_type.as_ptr(),
+            ptr::null(),        // keep content
+            new_props.as_ptr(),
+            &mut update_len2,
+        );
+        assert!(!result2.is_null());
+        yrs_free_bytes(result2, update_len2);
+
+        let json = yrs_doc_get_blocks_json(doc);
+        let json_str = unsafe { CStr::from_ptr(json) }.to_str().unwrap();
+        assert!(json_str.contains("heading"));
+        assert!(json_str.contains("Updated text")); // content preserved
+        yrs_free_string(json);
 
         yrs_doc_destroy(doc);
     }
