@@ -194,6 +194,152 @@ public class YrsDocument implements AutoCloseable {
     }
 
     /**
+     * Get a single block by its ID.
+     *
+     * @param blockId the block's UUID string
+     * @return JSON string of the block, or null if not found
+     */
+    public String getBlockById(String blockId) {
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment idNative = arena.allocateFrom(blockId);
+            MemorySegment ptr = (MemorySegment) bridge.yrsDocGetBlockById.invokeExact(docPtr, idNative);
+            if (ptr.equals(MemorySegment.NULL)) {
+                return null;
+            }
+            String result = ptr.reinterpret(Long.MAX_VALUE).getString(0);
+            bridge.yrsFreeString.invokeExact(ptr);
+            return result;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Throwable t) {
+            throw new RuntimeException("Failed to get block by ID", t);
+        }
+    }
+
+    /**
+     * Update a block's content, type, and/or properties.
+     *
+     * @param blockId   the block's UUID string
+     * @param newType   new block type (null to keep current)
+     * @param newContent new text content (null to keep current)
+     * @param newPropsJson new properties JSON (null to keep current)
+     * @return update diff bytes for broadcasting, or null if block not found
+     */
+    public byte[] updateBlock(String blockId, String newType, String newContent, String newPropsJson) {
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment idNative = arena.allocateFrom(blockId);
+            MemorySegment typeNative = (newType != null) ? arena.allocateFrom(newType) : MemorySegment.NULL;
+            MemorySegment contentNative = (newContent != null) ? arena.allocateFrom(newContent) : MemorySegment.NULL;
+            MemorySegment propsNative = (newPropsJson != null) ? arena.allocateFrom(newPropsJson) : MemorySegment.NULL;
+            MemorySegment outLen = arena.allocate(ValueLayout.JAVA_INT);
+
+            MemorySegment ptr = (MemorySegment) bridge.yrsDocUpdateBlock.invokeExact(
+                    docPtr, idNative, typeNative, contentNative, propsNative, outLen
+            );
+            if (ptr.equals(MemorySegment.NULL)) {
+                return null;
+            }
+
+            int len = outLen.get(ValueLayout.JAVA_INT, 0);
+            byte[] result = ptr.reinterpret(len).toArray(ValueLayout.JAVA_BYTE);
+            bridge.yrsFreeBytes.invokeExact(ptr, len);
+            return result;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Throwable t) {
+            throw new RuntimeException("Failed to update block", t);
+        }
+    }
+
+    /**
+     * Delete a block by its ID.
+     *
+     * @param blockId the block's UUID string
+     * @return update diff bytes for broadcasting, or null if block not found
+     */
+    public byte[] deleteBlockById(String blockId) {
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment idNative = arena.allocateFrom(blockId);
+            MemorySegment outLen = arena.allocate(ValueLayout.JAVA_INT);
+
+            MemorySegment ptr = (MemorySegment) bridge.yrsDocDeleteBlockById.invokeExact(
+                    docPtr, idNative, outLen
+            );
+            if (ptr.equals(MemorySegment.NULL)) {
+                return null;
+            }
+
+            int len = outLen.get(ValueLayout.JAVA_INT, 0);
+            byte[] result = ptr.reinterpret(len).toArray(ValueLayout.JAVA_BYTE);
+            bridge.yrsFreeBytes.invokeExact(ptr, len);
+            return result;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Throwable t) {
+            throw new RuntimeException("Failed to delete block by ID", t);
+        }
+    }
+
+    /**
+     * Insert a block with semantic position control.
+     *
+     * @param blockType  XML tag name (e.g. "paragraph", "heading")
+     * @param content    text content (may be null)
+     * @param propsJson  properties JSON (may be null)
+     * @param position   one of "start", "end", "after_block"
+     * @param afterId    block ID to insert after (only used when position = "after_block")
+     * @return update diff bytes for broadcasting
+     */
+    public byte[] insertBlockV2(String blockType, String content, String propsJson, String position, String afterId) {
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment typeNative = arena.allocateFrom(blockType);
+            MemorySegment contentNative = (content != null) ? arena.allocateFrom(content) : MemorySegment.NULL;
+            MemorySegment propsNative = (propsJson != null) ? arena.allocateFrom(propsJson) : MemorySegment.NULL;
+            MemorySegment posNative = arena.allocateFrom(position);
+            MemorySegment afterNative = (afterId != null) ? arena.allocateFrom(afterId) : MemorySegment.NULL;
+            MemorySegment outLen = arena.allocate(ValueLayout.JAVA_INT);
+
+            MemorySegment ptr = (MemorySegment) bridge.yrsDocInsertBlockV2.invokeExact(
+                    docPtr, typeNative, contentNative, propsNative, posNative, afterNative, outLen
+            );
+            if (ptr.equals(MemorySegment.NULL)) {
+                throw new RuntimeException("yrs_doc_insert_block_v2 returned null");
+            }
+
+            int len = outLen.get(ValueLayout.JAVA_INT, 0);
+            byte[] result = ptr.reinterpret(len).toArray(ValueLayout.JAVA_BYTE);
+            bridge.yrsFreeBytes.invokeExact(ptr, len);
+            return result;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Throwable t) {
+            throw new RuntimeException("Failed to insert block v2", t);
+        }
+    }
+
+    /**
+     * Get a single block by its index in the blockGroup.
+     *
+     * @param index 0-based position
+     * @return JSON string of the block, or null if out of bounds
+     */
+    public String getBlockAtIndex(int index) {
+        try {
+            MemorySegment ptr = (MemorySegment) bridge.yrsDocGetBlockAtIndex.invokeExact(docPtr, index);
+            if (ptr.equals(MemorySegment.NULL)) {
+                return null;
+            }
+            String result = ptr.reinterpret(Long.MAX_VALUE).getString(0);
+            bridge.yrsFreeString.invokeExact(ptr);
+            return result;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Throwable t) {
+            throw new RuntimeException("Failed to get block at index", t);
+        }
+    }
+
+    /**
      * Insert a new block at the given index in the document.
      *
      * @param index     position to insert (0-based)

@@ -34,6 +34,11 @@ public class YrsBridge implements AutoCloseable {
     final MethodHandle yrsDocGetBlocksJson;
     final MethodHandle yrsDocInsertBlock;
     final MethodHandle yrsDocDeleteBlock;
+    final MethodHandle yrsDocGetBlockById;
+    final MethodHandle yrsDocUpdateBlock;
+    final MethodHandle yrsDocDeleteBlockById;
+    final MethodHandle yrsDocInsertBlockV2;
+    final MethodHandle yrsDocGetBlockAtIndex;
     final MethodHandle yrsFreeBytes;
     final MethodHandle yrsFreeString;
 
@@ -110,6 +115,46 @@ public class YrsBridge implements AutoCloseable {
         yrsDocDeleteBlock = linker.downcallHandle(
                 lib.find("yrs_doc_delete_block").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS)
+        );
+
+        // char* yrs_doc_get_block_by_id(YrsDoc*, char* block_id)
+        yrsDocGetBlockById = linker.downcallHandle(
+                lib.find("yrs_doc_get_block_by_id").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+        );
+
+        // uint8_t* yrs_doc_update_block(YrsDoc*, char* block_id, char* new_type, char* new_content, char* new_props_json, uint32_t* out_len)
+        yrsDocUpdateBlock = linker.downcallHandle(
+                lib.find("yrs_doc_update_block").orElseThrow(),
+                FunctionDescriptor.of(
+                        ValueLayout.ADDRESS,
+                        ValueLayout.ADDRESS, ValueLayout.ADDRESS,
+                        ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS,
+                        ValueLayout.ADDRESS
+                )
+        );
+
+        // uint8_t* yrs_doc_delete_block_by_id(YrsDoc*, char* block_id, uint32_t* out_len)
+        yrsDocDeleteBlockById = linker.downcallHandle(
+                lib.find("yrs_doc_delete_block_by_id").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+        );
+
+        // uint8_t* yrs_doc_insert_block_v2(YrsDoc*, char* type, char* content, char* props, char* position, char* after_id, uint32_t* out_len)
+        yrsDocInsertBlockV2 = linker.downcallHandle(
+                lib.find("yrs_doc_insert_block_v2").orElseThrow(),
+                FunctionDescriptor.of(
+                        ValueLayout.ADDRESS,
+                        ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS,
+                        ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS,
+                        ValueLayout.ADDRESS
+                )
+        );
+
+        // char* yrs_doc_get_block_at_index(YrsDoc*, uint32_t index)
+        yrsDocGetBlockAtIndex = linker.downcallHandle(
+                lib.find("yrs_doc_get_block_at_index").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT)
         );
 
         // void yrs_free_bytes(uint8_t*, uint32_t)
