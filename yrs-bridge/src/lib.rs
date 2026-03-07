@@ -426,6 +426,62 @@ pub extern "C" fn yrs_doc_update_block(
     into_byte_ptr(diff, out_len)
 }
 
+/// Delete a block by its ID. Returns update bytes (diff) for broadcasting.
+/// Returns null if block not found. Caller must free via `yrs_free_bytes`.
+#[no_mangle]
+pub extern "C" fn yrs_doc_delete_block_by_id(
+    doc: *mut YrsDoc,
+    block_id: *const c_char,
+    out_len: *mut u32,
+) -> *mut u8 {
+    if doc.is_null() || block_id.is_null() || out_len.is_null() {
+        return ptr::null_mut();
+    }
+    let doc = unsafe { &mut *doc };
+    let target_id = match unsafe { CStr::from_ptr(block_id) }.to_str() {
+        Ok(s) => s,
+        Err(_) => return ptr::null_mut(),
+    };
+
+    let sv_before = {
+        let txn = doc.doc.transact();
+        txn.state_vector()
+    };
+
+    {
+        let mut txn = doc.doc.transact_mut();
+        let fragment = txn.get_or_insert_xml_fragment(FRAGMENT_NAME);
+        if fragment.len(&txn) == 0 {
+            return ptr::null_mut();
+        }
+        let block_group = match fragment.get(&txn, 0) {
+            Some(yrs::XmlOut::Element(bg)) if bg.tag().as_ref() == "blockGroup" => bg,
+            _ => return ptr::null_mut(),
+        };
+
+        let mut found_index = None;
+        for i in 0..block_group.len(&txn) {
+            if let Some(yrs::XmlOut::Element(container)) = block_group.get(&txn, i) {
+                if let Some(id) = container.get_attribute(&txn, "id") {
+                    if id == target_id {
+                        found_index = Some(i);
+                        break;
+                    }
+                }
+            }
+        }
+
+        match found_index {
+            Some(i) => block_group.remove_range(&mut txn, i, 1),
+            None => return ptr::null_mut(),
+        }
+    }
+
+    let txn = doc.doc.transact();
+    let diff = txn.encode_diff_v1(&sv_before);
+    into_byte_ptr(diff, out_len)
+}
+
 /// Insert a new block at the given index in the document's XmlFragment.
 /// - `block_type`: the XML tag name (e.g. "paragraph", "heading")
 /// - `content`: text content for the block
@@ -1004,6 +1060,49 @@ mod tests {
         assert!(json_str.contains("heading"));
         assert!(json_str.contains("Updated text")); // content preserved
         yrs_free_string(json);
+
+        yrs_doc_destroy(doc);
+    }
+
+    #[test]
+    fn test_delete_block_by_id() {
+        let doc = yrs_doc_new();
+
+        // Insert two blocks
+        let tag = CString::new("paragraph").unwrap();
+        let c1 = CString::new("Block One").unwrap();
+        let c2 = CString::new("Block Two").unwrap();
+        let mut len: u32 = 0;
+        let u1 = yrs_doc_insert_block(doc, 0, tag.as_ptr(), c1.as_ptr(), ptr::null(), &mut len);
+        yrs_free_bytes(u1, len);
+        let u2 = yrs_doc_insert_block(doc, 1, tag.as_ptr(), c2.as_ptr(), ptr::null(), &mut len);
+        yrs_free_bytes(u2, len);
+
+        // Get first block's ID
+        let json = yrs_doc_get_blocks_json(doc);
+        let json_str = unsafe { CStr::from_ptr(json) }.to_str().unwrap();
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(json_str).unwrap();
+        let block_id = parsed[0]["children"].as_array().unwrap()[0]["props"]["id"].as_str().unwrap().to_string();
+        yrs_free_string(json);
+
+        // Delete by ID
+        let id_cstr = CString::new(block_id.as_str()).unwrap();
+        let mut del_len: u32 = 0;
+        let del = yrs_doc_delete_block_by_id(doc, id_cstr.as_ptr(), &mut del_len);
+        assert!(!del.is_null());
+        yrs_free_bytes(del, del_len);
+
+        // Verify only Block Two remains
+        let json = yrs_doc_get_blocks_json(doc);
+        let json_str = unsafe { CStr::from_ptr(json) }.to_str().unwrap();
+        assert!(!json_str.contains("Block One"));
+        assert!(json_str.contains("Block Two"));
+        yrs_free_string(json);
+
+        // Delete nonexistent ID returns null
+        let bad = CString::new("no-such-id").unwrap();
+        let result = yrs_doc_delete_block_by_id(doc, bad.as_ptr(), &mut del_len);
+        assert!(result.is_null());
 
         yrs_doc_destroy(doc);
     }
