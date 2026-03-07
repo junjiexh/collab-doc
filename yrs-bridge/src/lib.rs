@@ -220,6 +220,55 @@ pub extern "C" fn yrs_doc_get_blocks_json(doc: *const YrsDoc) -> *mut c_char {
     }
 }
 
+/// Get a single block by its ID. Returns a JSON string representing the blockContainer
+/// and its children. Returns null if not found.
+/// The caller must free the returned string via `yrs_free_string`.
+#[no_mangle]
+pub extern "C" fn yrs_doc_get_block_by_id(doc: *const YrsDoc, block_id: *const c_char) -> *mut c_char {
+    if doc.is_null() || block_id.is_null() {
+        return ptr::null_mut();
+    }
+    let doc = unsafe { &*doc };
+    let target_id = match unsafe { CStr::from_ptr(block_id) }.to_str() {
+        Ok(s) => s,
+        Err(_) => return ptr::null_mut(),
+    };
+
+    let mut txn = doc.doc.transact_mut();
+    let fragment = txn.get_or_insert_xml_fragment(FRAGMENT_NAME);
+
+    // Find blockGroup
+    if fragment.len(&txn) == 0 {
+        return ptr::null_mut();
+    }
+    let block_group = match fragment.get(&txn, 0) {
+        Some(yrs::XmlOut::Element(bg)) if bg.tag().as_ref() == "blockGroup" => bg,
+        _ => return ptr::null_mut(),
+    };
+
+    // Search blockContainers for matching ID
+    for i in 0..block_group.len(&txn) {
+        if let Some(ref child) = block_group.get(&txn, i) {
+            if let yrs::XmlOut::Element(container) = child {
+                if let Some(id) = container.get_attribute(&txn, "id") {
+                    if id == target_id {
+                        let json = xml_out_to_json(child, &txn);
+                        let json_str = match serde_json::to_string(&json) {
+                            Ok(s) => s,
+                            Err(_) => return ptr::null_mut(),
+                        };
+                        return match CString::new(json_str) {
+                            Ok(c) => c.into_raw(),
+                            Err(_) => ptr::null_mut(),
+                        };
+                    }
+                }
+            }
+        }
+    }
+    ptr::null_mut()
+}
+
 /// Insert a new block at the given index in the document's XmlFragment.
 /// - `block_type`: the XML tag name (e.g. "paragraph", "heading")
 /// - `content`: text content for the block
@@ -700,6 +749,43 @@ mod tests {
     fn test_free_null_is_safe() {
         yrs_free_bytes(ptr::null_mut(), 0);
         yrs_free_string(ptr::null_mut());
+    }
+
+    #[test]
+    fn test_get_block_by_id() {
+        let doc = yrs_doc_new();
+
+        // Insert a block
+        let tag = CString::new("paragraph").unwrap();
+        let content = CString::new("Find me by ID").unwrap();
+        let mut len: u32 = 0;
+        let update = yrs_doc_insert_block(doc, 0, tag.as_ptr(), content.as_ptr(), ptr::null(), &mut len);
+        assert!(!update.is_null());
+        yrs_free_bytes(update, len);
+
+        // Get all blocks to find the block ID
+        let json = yrs_doc_get_blocks_json(doc);
+        let json_str = unsafe { CStr::from_ptr(json) }.to_str().unwrap();
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(json_str).unwrap();
+        let containers = parsed[0]["children"].as_array().unwrap();
+        let block_id = containers[0]["props"]["id"].as_str().unwrap();
+        yrs_free_string(json);
+
+        // Now get by ID
+        let id_cstr = CString::new(block_id).unwrap();
+        let result = yrs_doc_get_block_by_id(doc, id_cstr.as_ptr());
+        assert!(!result.is_null());
+        let result_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
+        assert!(result_str.contains("paragraph"));
+        assert!(result_str.contains("Find me by ID"));
+        yrs_free_string(result);
+
+        // Test not found
+        let bad_id = CString::new("nonexistent-id").unwrap();
+        let not_found = yrs_doc_get_block_by_id(doc, bad_id.as_ptr());
+        assert!(not_found.is_null());
+
+        yrs_doc_destroy(doc);
     }
 
     #[test]
