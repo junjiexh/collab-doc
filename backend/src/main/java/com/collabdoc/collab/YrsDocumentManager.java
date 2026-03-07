@@ -85,6 +85,50 @@ public class YrsDocumentManager {
         }
     }
 
+    /** Get a single block by ID. Returns JSON string or null. */
+    public String getBlockById(UUID docId, String blockId) {
+        var doc = getOrLoadDocument(docId);
+        synchronized (doc) {
+            return doc.getBlockById(blockId);
+        }
+    }
+
+    /** Update a block by ID. Returns the Yjs update to broadcast. */
+    public byte[] updateBlock(UUID docId, String blockId, String newType, String newContent, String newPropsJson) {
+        var doc = getOrLoadDocument(docId);
+        synchronized (doc) {
+            byte[] update = doc.updateBlock(blockId, newType, newContent, newPropsJson);
+            if (update != null) {
+                updateRepository.save(new DocumentUpdate(docId, update));
+            }
+            return update;
+        }
+    }
+
+    /** Delete a block by ID. Returns the Yjs update to broadcast. */
+    public byte[] deleteBlockById(UUID docId, String blockId) {
+        var doc = getOrLoadDocument(docId);
+        synchronized (doc) {
+            byte[] update = doc.deleteBlockById(blockId);
+            if (update != null) {
+                updateRepository.save(new DocumentUpdate(docId, update));
+            }
+            return update;
+        }
+    }
+
+    /** Insert a block with semantic position. Returns the Yjs update to broadcast. */
+    public byte[] insertBlockV2(UUID docId, String blockType, String content, String propsJson, String position, String afterId) {
+        var doc = getOrLoadDocument(docId);
+        synchronized (doc) {
+            byte[] update = doc.insertBlockV2(blockType, content, propsJson, position, afterId);
+            if (update != null) {
+                updateRepository.save(new DocumentUpdate(docId, update));
+            }
+            return update;
+        }
+    }
+
     /** Get the state vector for sync protocol. */
     public byte[] getStateVector(UUID docId) {
         var doc = getOrLoadDocument(docId);
