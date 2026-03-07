@@ -651,6 +651,131 @@ pub extern "C" fn yrs_doc_delete_block(
     into_byte_ptr(diff, out_len)
 }
 
+/// Insert a block with semantic position control.
+/// - `position`: one of "start", "end", "after_block"
+/// - `after_id`: block ID to insert after (only used when position = "after_block")
+///
+/// Returns update bytes (diff) for broadcasting.
+/// Returns null on error. Caller must free bytes via `yrs_free_bytes`.
+#[no_mangle]
+pub extern "C" fn yrs_doc_insert_block_v2(
+    doc: *mut YrsDoc,
+    block_type: *const c_char,
+    content: *const c_char,
+    props_json: *const c_char,
+    position: *const c_char,
+    after_id: *const c_char,
+    out_len: *mut u32,
+) -> *mut u8 {
+    if doc.is_null() || block_type.is_null() || position.is_null() || out_len.is_null() {
+        return ptr::null_mut();
+    }
+    let doc = unsafe { &mut *doc };
+
+    let tag = match unsafe { CStr::from_ptr(block_type) }.to_str() {
+        Ok(s) => s.to_string(),
+        Err(_) => return ptr::null_mut(),
+    };
+    let text_content = if content.is_null() {
+        String::new()
+    } else {
+        match unsafe { CStr::from_ptr(content) }.to_str() {
+            Ok(s) => s.to_string(),
+            Err(_) => return ptr::null_mut(),
+        }
+    };
+    let pos_str = match unsafe { CStr::from_ptr(position) }.to_str() {
+        Ok(s) => s.to_string(),
+        Err(_) => return ptr::null_mut(),
+    };
+    let props: HashMap<String, String> = if props_json.is_null() {
+        HashMap::new()
+    } else {
+        match unsafe { CStr::from_ptr(props_json) }.to_str() {
+            Ok(s) if !s.is_empty() => serde_json::from_str(s).unwrap_or_default(),
+            _ => HashMap::new(),
+        }
+    };
+
+    let sv_before = {
+        let txn = doc.doc.transact();
+        txn.state_vector()
+    };
+
+    {
+        let mut txn = doc.doc.transact_mut();
+        let fragment = txn.get_or_insert_xml_fragment(FRAGMENT_NAME);
+
+        let block_group = if fragment.len(&txn) > 0 {
+            if let Some(yrs::XmlOut::Element(bg)) = fragment.get(&txn, 0) {
+                if bg.tag().as_ref() == "blockGroup" {
+                    bg
+                } else {
+                    fragment.insert(&mut txn, 0, XmlElementPrelim::empty("blockGroup"))
+                }
+            } else {
+                fragment.insert(&mut txn, 0, XmlElementPrelim::empty("blockGroup"))
+            }
+        } else {
+            fragment.insert(&mut txn, 0, XmlElementPrelim::empty("blockGroup"))
+        };
+
+        // Determine insert index based on position
+        let bg_len = block_group.len(&txn);
+        let insert_index = match pos_str.as_str() {
+            "start" => 0,
+            "end" => bg_len,
+            "after_block" => {
+                if after_id.is_null() {
+                    return ptr::null_mut();
+                }
+                let target = match unsafe { CStr::from_ptr(after_id) }.to_str() {
+                    Ok(s) => s,
+                    Err(_) => return ptr::null_mut(),
+                };
+                let mut found = None;
+                for i in 0..bg_len {
+                    if let Some(yrs::XmlOut::Element(c)) = block_group.get(&txn, i) {
+                        if let Some(id) = c.get_attribute(&txn, "id") {
+                            if id == target {
+                                found = Some(i + 1);
+                                break;
+                            }
+                        }
+                    }
+                }
+                match found {
+                    Some(i) => i,
+                    None => return ptr::null_mut(),
+                }
+            }
+            _ => return ptr::null_mut(),
+        };
+
+        // Create blockContainer
+        let container = block_group.insert(&mut txn, insert_index, XmlElementPrelim::empty("blockContainer"));
+        let block_id = uuid::Uuid::new_v4().to_string();
+        container.insert_attribute(&mut txn, Arc::<str>::from("id"), block_id);
+        container.insert_attribute(&mut txn, Arc::<str>::from("backgroundColor"), "default".to_string());
+        container.insert_attribute(&mut txn, Arc::<str>::from("textColor"), "default".to_string());
+
+        let elem_ref = container.insert(&mut txn, 0, XmlElementPrelim::empty(&*tag));
+        elem_ref.insert_attribute(&mut txn, Arc::<str>::from("textAlignment"), "left".to_string());
+        for (key, value) in &props {
+            elem_ref.insert_attribute(&mut txn, Arc::<str>::from(key.as_str()), value.clone());
+        }
+
+        let xml_text = elem_ref.insert(&mut txn, 0, XmlTextPrelim::new(""));
+        if !text_content.is_empty() {
+            xml_text.insert(&mut txn, 0, &*text_content);
+        }
+    }
+
+    let txn = doc.doc.transact();
+    let diff = txn.encode_diff_v1(&sv_before);
+    into_byte_ptr(diff, out_len)
+}
+
 // ---------------------------------------------------------------------------
 // Memory management
 // ---------------------------------------------------------------------------
@@ -1103,6 +1228,69 @@ mod tests {
         let bad = CString::new("no-such-id").unwrap();
         let result = yrs_doc_delete_block_by_id(doc, bad.as_ptr(), &mut del_len);
         assert!(result.is_null());
+
+        yrs_doc_destroy(doc);
+    }
+
+    #[test]
+    fn test_insert_block_v2_positions() {
+        let doc = yrs_doc_new();
+        let tag = CString::new("paragraph").unwrap();
+        let mut len: u32 = 0;
+
+        // Insert "A" at end (empty doc)
+        let pos_end = CString::new("end").unwrap();
+        let ca = CString::new("A").unwrap();
+        let u = yrs_doc_insert_block_v2(doc, tag.as_ptr(), ca.as_ptr(), ptr::null(), pos_end.as_ptr(), ptr::null(), &mut len);
+        assert!(!u.is_null());
+        yrs_free_bytes(u, len);
+
+        // Insert "B" at end
+        let cb = CString::new("B").unwrap();
+        let u = yrs_doc_insert_block_v2(doc, tag.as_ptr(), cb.as_ptr(), ptr::null(), pos_end.as_ptr(), ptr::null(), &mut len);
+        assert!(!u.is_null());
+        yrs_free_bytes(u, len);
+
+        // Insert "C" at start → order should be C, A, B
+        let pos_start = CString::new("start").unwrap();
+        let cc = CString::new("C").unwrap();
+        let u = yrs_doc_insert_block_v2(doc, tag.as_ptr(), cc.as_ptr(), ptr::null(), pos_start.as_ptr(), ptr::null(), &mut len);
+        assert!(!u.is_null());
+        yrs_free_bytes(u, len);
+
+        // Get block A's ID for after_block test
+        let json = yrs_doc_get_blocks_json(doc);
+        let json_str = unsafe { CStr::from_ptr(json) }.to_str().unwrap();
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(json_str).unwrap();
+        let containers = parsed[0]["children"].as_array().unwrap();
+        // Order: C(0), A(1), B(2)
+        let a_id = containers[1]["props"]["id"].as_str().unwrap().to_string();
+        yrs_free_string(json);
+
+        // Insert "D" after A → order should be C, A, D, B
+        let pos_after = CString::new("after_block").unwrap();
+        let after_id = CString::new(a_id.as_str()).unwrap();
+        let cd = CString::new("D").unwrap();
+        let u = yrs_doc_insert_block_v2(doc, tag.as_ptr(), cd.as_ptr(), ptr::null(), pos_after.as_ptr(), after_id.as_ptr(), &mut len);
+        assert!(!u.is_null());
+        yrs_free_bytes(u, len);
+
+        // Verify final order: C, A, D, B
+        let json = yrs_doc_get_blocks_json(doc);
+        let json_str = unsafe { CStr::from_ptr(json) }.to_str().unwrap();
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(json_str).unwrap();
+        let containers = parsed[0]["children"].as_array().unwrap();
+        assert_eq!(containers.len(), 4);
+
+        // Extract content text from each container
+        fn get_text(c: &serde_json::Value) -> &str {
+            c["children"][0]["children"][0].as_str().unwrap_or("")
+        }
+        assert_eq!(get_text(&containers[0]), "C");
+        assert_eq!(get_text(&containers[1]), "A");
+        assert_eq!(get_text(&containers[2]), "D");
+        assert_eq!(get_text(&containers[3]), "B");
+        yrs_free_string(json);
 
         yrs_doc_destroy(doc);
     }
