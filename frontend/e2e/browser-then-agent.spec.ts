@@ -23,9 +23,9 @@ test("browser typing + agent insert coexist", async ({ page }) => {
     timeout: 3000,
   });
 
-  // 5. Agent inserts a block via REST API
+  // 5. Agent inserts a block via REST API (new v2 format)
   await page.request.post(`${API_BASE}/docs/${docId}/blocks`, {
-    data: { index: 999, type: "paragraph", content: "Hello from agent" },
+    data: { type: "paragraph", content: "Hello from agent", position: "end" },
   });
 
   // 6. Both texts should be visible in the editor
