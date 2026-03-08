@@ -69,7 +69,7 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
         session.getAttributes().put("permission", permission);
 
         // Ensure document is loaded in memory
-        docManager.getOrLoadDocument(docId);
+        docManager.ensureLoaded(docId);
 
         // Wrap session for thread-safe concurrent sends
         var decorated = new ConcurrentWebSocketSessionDecorator(session, SEND_TIME_LIMIT, SEND_BUFFER_LIMIT);
@@ -162,7 +162,6 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
                     rooms.remove(docId);
                     // Create snapshot and unload document
                     docManager.createSnapshot(docId);
-                    docManager.unloadDocument(docId);
                 }
             }
         }
