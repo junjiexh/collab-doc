@@ -61,8 +61,9 @@ class YrsDocumentManagerTest {
         byte[] newState = new byte[]{12, 13};
         byte[] rebuiltState = new byte[]{20, 21};
 
-        // First call in loadState — Redis miss
+        // Redis misses in loadState (initial check + double-check after lock)
         when(redisState.getState(docId)).thenReturn(null);
+        when(redisState.tryAcquireLoadLock(docId)).thenReturn(true);
         when(snapshotRepo.findById(docId)).thenReturn(Optional.of(new DocumentSnapshot(docId, snapshotData)));
         when(updateRepo.findByDocIdOrderByIdAsc(docId)).thenReturn(Collections.emptyList());
 
@@ -108,11 +109,12 @@ class YrsDocumentManagerTest {
         UUID docId = UUID.randomUUID();
         byte[] state = new byte[]{1, 2, 3};
         when(redisState.getState(docId)).thenReturn(state);
+        when(updateRepo.findMaxIdByDocId(docId)).thenReturn(42L);
 
         manager.createSnapshot(docId);
 
         verify(snapshotRepo).save(any(DocumentSnapshot.class));
-        verify(updateRepo).deleteByDocId(docId);
+        verify(updateRepo).deleteByDocIdAndIdLessThanEqual(docId, 42L);
     }
 
     @Test

@@ -37,21 +37,38 @@ public class YrsDocumentManager {
         byte[] state = redisState.getState(docId);
         if (state != null) return state;
 
-        // Redis miss — rebuild from PostgreSQL
-        var doc = bridge.createDocument();
+        // Try to acquire load lock — another instance might be rebuilding
+        if (!redisState.tryAcquireLoadLock(docId)) {
+            // Another instance is loading — wait briefly and retry from Redis
+            try { Thread.sleep(100); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+            state = redisState.getState(docId);
+            if (state != null) return state;
+            // Still no state — proceed anyway (lock may have expired)
+        }
+
         try {
-            snapshotRepository.findById(docId).ifPresent(snapshot ->
-                doc.loadState(snapshot.getStateData())
-            );
-            var updates = updateRepository.findByDocIdOrderByIdAsc(docId);
-            for (var update : updates) {
-                doc.applyUpdate(update.getUpdateData());
+            // Double-check Redis after acquiring lock
+            state = redisState.getState(docId);
+            if (state != null) return state;
+
+            // Redis miss — rebuild from PostgreSQL
+            var doc = bridge.createDocument();
+            try {
+                snapshotRepository.findById(docId).ifPresent(snapshot ->
+                    doc.loadState(snapshot.getStateData())
+                );
+                var updates = updateRepository.findByDocIdOrderByIdAsc(docId);
+                for (var update : updates) {
+                    doc.applyUpdate(update.getUpdateData());
+                }
+                byte[] rebuilt = doc.encodeState();
+                redisState.setState(docId, rebuilt);
+                return rebuilt;
+            } finally {
+                doc.close();
             }
-            byte[] rebuilt = doc.encodeState();
-            redisState.setState(docId, rebuilt);
-            return rebuilt;
         } finally {
-            doc.close();
+            redisState.releaseLoadLock(docId);
         }
     }
 
@@ -160,10 +177,19 @@ public class YrsDocumentManager {
 
     /** Create a snapshot from Redis state to PostgreSQL. */
     public void createSnapshot(UUID docId) {
-        byte[] state = redisState.getState(docId);
-        if (state != null) {
-            snapshotRepository.save(new DocumentSnapshot(docId, state));
-            updateRepository.deleteByDocId(docId);
+        Lock lock = locks.get(docId);
+        lock.lock();
+        try {
+            byte[] state = redisState.getState(docId);
+            if (state != null) {
+                Long maxUpdateId = updateRepository.findMaxIdByDocId(docId);
+                snapshotRepository.save(new DocumentSnapshot(docId, state));
+                if (maxUpdateId != null) {
+                    updateRepository.deleteByDocIdAndIdLessThanEqual(docId, maxUpdateId);
+                }
+            }
+        } finally {
+            lock.unlock();
         }
     }
 }
