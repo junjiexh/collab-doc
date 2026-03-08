@@ -1,104 +1,23 @@
-name: CI Full
+name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 jobs:
-  yrs-bridge:
-    name: Build yrs-bridge
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: actions/cache@v4
-        with:
-          path: yrs-bridge/target
-          key: yrs-bridge-${{ runner.os }}-cargo-${{ hashFiles('yrs-bridge/Cargo.lock') }}
-          restore-keys: |
-            yrs-bridge-${{ runner.os }}-cargo-
-
-      - name: Build yrs-bridge cdylib
-        run: cargo build --release
-        working-directory: yrs-bridge/
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: yrs-bridge-so
-          path: yrs-bridge/target/release/libyrs_bridge.so
-          retention-days: 1
-
-  backend-test:
-    name: Backend tests
-    runs-on: ubuntu-latest
-    needs: yrs-bridge
-
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_DB: collabdoc
-          POSTGRES_USER: collabdoc
-          POSTGRES_PASSWORD: collabdoc
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U collabdoc"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: oracle
-          java-version: '25'
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: yrs-bridge-so
-          path: yrs-bridge/target/release/
-
-      - name: Make .so executable
-        run: chmod +x yrs-bridge/target/release/libyrs_bridge.so
-
-      - name: Run backend tests
-        run: ./gradlew test
-        working-directory: backend/
-        env:
-          YRS_BRIDGE_LIB_PATH: ${{ github.workspace }}/yrs-bridge/target/release/libyrs_bridge.so
-
-  frontend-build:
-    name: Build frontend
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-        working-directory: frontend/
-
-      - name: Build frontend
-        run: npm run build
-        working-directory: frontend/
+  fast:
+    name: Fast checks
+    uses: ./.github/workflows/ci-fast.yml
 
   e2e:
     name: E2E tests
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
-    needs: [yrs-bridge, backend-test, frontend-build]
+    needs: fast
 
     services:
       postgres:
