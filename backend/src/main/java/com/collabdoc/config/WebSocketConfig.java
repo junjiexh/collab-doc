@@ -3,6 +3,7 @@ package com.collabdoc.config;
 import com.collabdoc.auth.JwtUtil;
 import com.collabdoc.permission.PermissionService;
 import com.collabdoc.collab.YrsDocumentManager;
+import com.collabdoc.collab.RedisPubSubBroadcaster;
 import com.collabdoc.collab.YjsWebSocketHandler;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -27,16 +28,19 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private final YrsDocumentManager docManager;
     private final JwtUtil jwtUtil;
     private final PermissionService permissionService;
+    private final RedisPubSubBroadcaster pubSubBroadcaster;
 
-    public WebSocketConfig(YrsDocumentManager docManager, JwtUtil jwtUtil, PermissionService permissionService) {
+    public WebSocketConfig(YrsDocumentManager docManager, JwtUtil jwtUtil, PermissionService permissionService,
+                           RedisPubSubBroadcaster pubSubBroadcaster) {
         this.docManager = docManager;
         this.jwtUtil = jwtUtil;
         this.permissionService = permissionService;
+        this.pubSubBroadcaster = pubSubBroadcaster;
     }
 
     @Bean
     public YjsWebSocketHandler yjsWebSocketHandler() {
-        return new YjsWebSocketHandler(docManager, permissionService);
+        return new YjsWebSocketHandler(docManager, permissionService, pubSubBroadcaster);
     }
 
     @Override
