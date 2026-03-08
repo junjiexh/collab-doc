@@ -1,10 +1,7 @@
 name: CI Fast
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_call:
 
 jobs:
   yrs-bridge:
