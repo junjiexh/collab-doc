@@ -4,6 +4,7 @@ import com.collabdoc.yrs.YrsBridge;
 import com.collabdoc.yrs.YrsDocument;
 import com.google.common.util.concurrent.Striped;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 import java.util.concurrent.locks.Lock;
@@ -176,6 +177,7 @@ public class YrsDocumentManager {
     }
 
     /** Create a snapshot from Redis state to PostgreSQL. */
+    @Transactional
     public void createSnapshot(UUID docId) {
         Lock lock = locks.get(docId);
         lock.lock();
