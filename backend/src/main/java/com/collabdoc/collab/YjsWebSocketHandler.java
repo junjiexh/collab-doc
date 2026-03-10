@@ -22,6 +22,7 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
 
     private final YrsDocumentManager docManager;
     private final PermissionService permissionService;
+    private final RedisPubSubBroadcaster pubSubBroadcaster;
 
     private static final int SEND_TIME_LIMIT = 5000;   // 5 seconds
     private static final int SEND_BUFFER_LIMIT = 512 * 1024; // 512 KB
@@ -33,9 +34,11 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
     // sessionId -> decorated session (for thread-safe sends)
     private final ConcurrentHashMap<String, WebSocketSession> decoratedSessions = new ConcurrentHashMap<>();
 
-    public YjsWebSocketHandler(YrsDocumentManager docManager, PermissionService permissionService) {
+    public YjsWebSocketHandler(YrsDocumentManager docManager, PermissionService permissionService,
+                               RedisPubSubBroadcaster pubSubBroadcaster) {
         this.docManager = docManager;
         this.permissionService = permissionService;
+        this.pubSubBroadcaster = pubSubBroadcaster;
     }
 
     @Override
@@ -69,7 +72,7 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
         session.getAttributes().put("permission", permission);
 
         // Ensure document is loaded in memory
-        docManager.getOrLoadDocument(docId);
+        docManager.ensureLoaded(docId);
 
         // Wrap session for thread-safe concurrent sends
         var decorated = new ConcurrentWebSocketSessionDecorator(session, SEND_TIME_LIMIT, SEND_BUFFER_LIMIT);
@@ -108,7 +111,9 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
             handleSyncMessage(decorated, docId, buf);
         } else if (msgType == YjsSyncProtocol.MSG_AWARENESS) {
             // Broadcast awareness messages to all other sessions in the room
-            broadcastToOthers(docId, decorated, message.getPayload().array());
+            byte[] data = message.getPayload().array();
+            broadcastToOthers(docId, decorated, data);
+            pubSubBroadcaster.publishAwareness(docId, data);
         }
     }
 
@@ -142,6 +147,7 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
                 if (applied != null) {
                     byte[] broadcastMsg = YjsSyncProtocol.encodeSyncUpdate(updateData);
                     broadcastToOthers(docId, session, broadcastMsg);
+                    pubSubBroadcaster.publishUpdate(docId, broadcastMsg);
                 }
             }
         }
@@ -160,9 +166,6 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
                 else sessions.remove(session);
                 if (sessions.isEmpty()) {
                     rooms.remove(docId);
-                    // Create snapshot and unload document
-                    docManager.createSnapshot(docId);
-                    docManager.unloadDocument(docId);
                 }
             }
         }
@@ -176,6 +179,16 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
         if (sessions != null) {
             for (WebSocketSession s : sessions) {
                 sendToSession(s, msg);
+            }
+        }
+    }
+
+    /** Broadcast raw bytes to all local sessions of a document (from Pub/Sub listener). */
+    public void broadcastRaw(UUID docId, byte[] data) {
+        Set<WebSocketSession> sessions = rooms.get(docId);
+        if (sessions != null) {
+            for (WebSocketSession s : sessions) {
+                sendToSession(s, data);
             }
         }
     }

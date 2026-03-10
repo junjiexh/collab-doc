@@ -9,6 +9,10 @@ spring:
     open-in-view: false
   flyway:
     enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
 
 server:
   port: 8080
@@ -19,3 +23,6 @@ collabdoc:
   jwt:
     secret: change-me-to-a-random-64-char-string-in-production-please-now
     expiration-days: 7
+  instance-id: ${INSTANCE_ID:${random.uuid}}
+  snapshot:
+    interval-minutes: ${SNAPSHOT_INTERVAL:5}

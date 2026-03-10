@@ -8,16 +8,23 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 info()  { printf '\033[1;34m[dev]\033[0m %s\n' "$*"; }
 error() { printf '\033[1;31m[dev]\033[0m %s\n' "$*"; }
 
-# ── Cleanup: kill child processes on exit ──
-PIDS=()
+# ── Cleanup: stop Docker on exit ──
 cleanup() {
-    info "Shutting down..."
-    for pid in "${PIDS[@]}"; do
-        kill "$pid" 2>/dev/null && wait "$pid" 2>/dev/null || true
-    done
+    info "Stopping Docker containers..."
+    docker compose -f "$ROOT/docker-compose.yml" down
     info "Done."
 }
 trap cleanup EXIT INT TERM
+
+# ── 0. Start Docker (PostgreSQL, Redis) ──
+info "Starting Docker containers..."
+docker compose -f "$ROOT/docker-compose.yml" up -d postgres redis
+
+info "Waiting for PostgreSQL to be ready..."
+until docker compose -f "$ROOT/docker-compose.yml" exec -T postgres pg_isready -U collabdoc -q 2>/dev/null; do
+    sleep 1
+done
+info "PostgreSQL is ready."
 
 # ── 1. Ensure Rust native library is built ──
 info "Building yrs-bridge (release)..."
@@ -29,18 +36,11 @@ if [ ! -d "$ROOT/frontend/node_modules" ]; then
     (cd "$ROOT/frontend" && pnpm install)
 fi
 
-# ── 3. Start backend ──
-info "Starting backend on :8080..."
-(cd "$ROOT/backend" && ./gradlew bootRun --console=plain -q) &
-PIDS+=($!)
-
-# ── 4. Start frontend ──
-info "Starting frontend on :3000..."
-(cd "$ROOT/frontend" && pnpm dev) &
-PIDS+=($!)
-
-# ── 5. Wait ──
-info "Backend  → http://localhost:8080"
-info "Frontend → http://localhost:3000"
-info "Press Ctrl+C to stop."
-wait
+# ── 3. Start backend + frontend concurrently ──
+info "Starting backend and frontend..."
+npx concurrently \
+    --kill-others \
+    --names "backend,frontend" \
+    --prefix-colors "blue,green" \
+    "cd '$ROOT/backend' && ./gradlew bootRun --console=plain -q" \
+    "cd '$ROOT/frontend' && pnpm dev"

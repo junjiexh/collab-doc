@@ -20,13 +20,16 @@ public class BlockController {
     private final YjsWebSocketHandler wsHandler;
     private final PermissionService permissionService;
     private final ObjectMapper objectMapper;
+    private final RedisPubSubBroadcaster pubSubBroadcaster;
 
     public BlockController(YrsDocumentManager docManager, YjsWebSocketHandler wsHandler,
-                           PermissionService permissionService, ObjectMapper objectMapper) {
+                           PermissionService permissionService, ObjectMapper objectMapper,
+                           RedisPubSubBroadcaster pubSubBroadcaster) {
         this.docManager = docManager;
         this.wsHandler = wsHandler;
         this.permissionService = permissionService;
         this.objectMapper = objectMapper;
+        this.pubSubBroadcaster = pubSubBroadcaster;
     }
 
     /** Get all blocks as parsed JSON array. */
@@ -83,6 +86,7 @@ public class BlockController {
                 propsJson, request.position(), request.afterId());
         if (update != null) {
             wsHandler.broadcastUpdate(docId, update);
+            pubSubBroadcaster.publishUpdate(docId, YjsSyncProtocol.encodeSyncUpdate(update));
         }
 
         // Insert children if provided (batch insert)
@@ -95,6 +99,7 @@ public class BlockController {
                         childPropsJson, "end", null);
                 if (childUpdate != null) {
                     wsHandler.broadcastUpdate(docId, childUpdate);
+                    pubSubBroadcaster.publishUpdate(docId, YjsSyncProtocol.encodeSyncUpdate(childUpdate));
                 }
             }
         }
@@ -129,6 +134,7 @@ public class BlockController {
             return ResponseEntity.status(404).body(Map.of("error", "Block not found"));
         }
         wsHandler.broadcastUpdate(docId, update);
+        pubSubBroadcaster.publishUpdate(docId, YjsSyncProtocol.encodeSyncUpdate(update));
 
         // Return updated block
         String blockJson = docManager.getBlockById(docId, blockId);
@@ -155,6 +161,7 @@ public class BlockController {
             return ResponseEntity.status(404).body(Map.of("error", "Block not found"));
         }
         wsHandler.broadcastUpdate(docId, update);
+        pubSubBroadcaster.publishUpdate(docId, YjsSyncProtocol.encodeSyncUpdate(update));
 
         return ResponseEntity.ok(Map.of("status", "ok", "deleted", blockId));
     }
