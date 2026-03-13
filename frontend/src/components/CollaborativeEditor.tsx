@@ -51,6 +51,7 @@ function BlockNoteEditor({
 
   return (
     <div style={{ minHeight: "70vh" }}>
+      <style>{`.bn-container, .bn-editor, .ProseMirror { background: ${theme.contentBg} !important; }`}</style>
       <BlockNoteView editor={editor} editable={editable} theme="light" />
     </div>
   );
