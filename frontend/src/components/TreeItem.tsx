@@ -1,4 +1,5 @@
 import { forwardRef, HTMLAttributes } from "react";
+import { theme } from "../theme";
 
 interface TreeItemProps extends HTMLAttributes<HTMLDivElement> {
   id: string;
@@ -15,117 +16,31 @@ interface TreeItemProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 export const TreeItem = forwardRef<HTMLDivElement, TreeItemProps>(
-  (
-    {
-      id,
-      title,
-      depth,
-      hasChildren,
-      isExpanded,
-      isActive,
-      onToggle,
-      onCreateChild,
-      onDelete,
-      isDragging,
-      handleProps,
-      style,
-      ...props
-    },
-    ref
-  ) => {
+  ({ id, title, depth, hasChildren, isExpanded, isActive, onToggle, onCreateChild, onDelete, isDragging, handleProps, style, ...props }, ref) => {
     return (
-      <div
-        ref={ref}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          padding: "4px 8px",
-          paddingLeft: `${depth * 20 + 8}px`,
-          transition: "padding-left 0.15s ease",
-          cursor: "pointer",
-          borderRadius: 4,
-          backgroundColor: isActive
-            ? "rgba(0,0,0,0.08)"
-            : isDragging
-            ? "rgba(0,0,0,0.04)"
-            : "transparent",
-          opacity: isDragging ? 0.5 : 1,
-          userSelect: "none",
-          fontSize: 14,
-          ...style,
-        }}
-        {...props}
-      >
-        <span
-          onClick={(e) => {
-            e.stopPropagation();
-            if (hasChildren) onToggle();
-          }}
-          style={{
-            width: 20,
-            display: "inline-flex",
-            justifyContent: "center",
-            color: "#999",
-            flexShrink: 0,
-          }}
-        >
-          {hasChildren ? (isExpanded ? "▾" : "▸") : ""}
+      <div ref={ref} style={{
+        display: "flex", alignItems: "center",
+        padding: "4px 8px", paddingLeft: `${depth * theme.treeIndent + 8}px`,
+        minHeight: theme.treeItemHeight,
+        transition: "padding-left 0.15s ease",
+        cursor: "pointer", borderRadius: theme.radius,
+        backgroundColor: isActive ? theme.activeBg : isDragging ? theme.hoverBg : "transparent",
+        opacity: isDragging ? 0.5 : 1,
+        userSelect: "none", fontSize: theme.sidebarFontSize,
+        ...style,
+      }} {...props}>
+        <span onClick={(e) => { e.stopPropagation(); if (hasChildren) onToggle(); }}
+          style={{ width: 20, display: "inline-flex", justifyContent: "center", color: theme.textSecondary, flexShrink: 0 }}>
+          {hasChildren ? (isExpanded ? theme.treeIconExpanded : theme.treeIconCollapsed) : ""}
         </span>
-
-        <span
-          {...handleProps}
-          style={{
-            flex: 1,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
+        <span {...handleProps} style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {title || "Untitled"}
         </span>
-
-        <span
-          className="tree-item-actions"
-          style={{
-            display: "flex",
-            gap: 4,
-            flexShrink: 0,
-          }}
-        >
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onCreateChild();
-            }}
-            style={{
-              border: "none",
-              background: "none",
-              cursor: "pointer",
-              padding: "0 4px",
-              fontSize: 14,
-              color: "#666",
-            }}
-            title="New sub-page"
-          >
-            +
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            style={{
-              border: "none",
-              background: "none",
-              cursor: "pointer",
-              padding: "0 4px",
-              fontSize: 14,
-              color: "#666",
-            }}
-            title="Delete"
-          >
-            ×
-          </button>
+        <span className="tree-item-actions" style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+          <button onClick={(e) => { e.stopPropagation(); onCreateChild(); }}
+            style={{ border: "none", background: "none", cursor: "pointer", padding: "0 4px", fontSize: theme.sidebarFontSize, color: theme.textSecondary }} title="New sub-page">+</button>
+          <button onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            style={{ border: "none", background: "none", cursor: "pointer", padding: "0 4px", fontSize: theme.sidebarFontSize, color: theme.textSecondary }} title="Delete">×</button>
         </span>
       </div>
     );
