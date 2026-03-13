@@ -3,6 +3,7 @@ import DocumentTree from "./DocumentTree";
 import SharedDocuments from "./SharedDocuments";
 import type { TreeNode } from "../utils/tree";
 import type { SharedDocument } from "../api";
+import { theme } from "../theme";
 
 interface SidebarProps {
   tree: TreeNode[];
@@ -16,83 +17,39 @@ interface SidebarProps {
 }
 
 export default function Sidebar({
-  tree,
-  expandedIds,
-  onToggle,
-  onCreateChild,
-  onCreateRoot,
-  onDelete,
-  onMove,
-  sharedDocuments,
+  tree, expandedIds, onToggle, onCreateChild, onCreateRoot, onDelete, onMove, sharedDocuments,
 }: SidebarProps) {
   return (
-    <div
-      style={{
-        width: 260,
-        minWidth: 200,
-        flex: 1,
-        borderRight: "1px solid #e8e8e8",
-        display: "flex",
-        flexDirection: "column",
-        backgroundColor: "#fbfbfa",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          padding: "16px 12px 8px",
-          fontWeight: 600,
-          fontSize: 13,
-          color: "#999",
-          textTransform: "uppercase",
-          letterSpacing: "0.05em",
-        }}
-      >
+    <div style={{
+      width: theme.sidebarWidth, minWidth: 200, flex: 1,
+      borderRight: `1px solid ${theme.border}`, display: "flex", flexDirection: "column",
+      backgroundColor: theme.sidebarBg, overflow: "hidden", fontFamily: theme.fontFamily,
+    }}>
+      <div style={{
+        padding: "16px 12px 8px", fontWeight: 600, fontSize: theme.smallFontSize,
+        color: theme.textSecondary, textTransform: "uppercase", letterSpacing: "0.05em",
+      }}>
         Documents
       </div>
-
       <div style={{ flex: 1, overflowY: "auto", padding: "0 4px" }}>
         {tree.length === 0 ? (
-          <div style={{ padding: "12px 8px", color: "#999", fontSize: 13 }}>
+          <div style={{ padding: "12px 8px", color: theme.textSecondary, fontSize: theme.smallFontSize }}>
             No documents yet
           </div>
         ) : (
-          <DocumentTree
-            tree={tree}
-            expandedIds={expandedIds}
-            onToggle={onToggle}
-            onCreateChild={onCreateChild}
-            onDelete={onDelete}
-            onMove={onMove}
-          />
+          <DocumentTree tree={tree} expandedIds={expandedIds} onToggle={onToggle} onCreateChild={onCreateChild} onDelete={onDelete} onMove={onMove} />
         )}
       </div>
-
       <SharedDocuments documents={sharedDocuments} />
-
-      <div style={{ padding: "8px 12px", borderTop: "1px solid #e8e8e8" }}>
-        <button
-          onClick={onCreateRoot}
-          style={{
-            width: "100%",
-            padding: "6px 12px",
-            border: "none",
-            borderRadius: 4,
-            backgroundColor: "transparent",
-            cursor: "pointer",
-            fontSize: 14,
-            color: "#666",
-            textAlign: "left",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-          }}
-          onMouseEnter={(e) =>
-            (e.currentTarget.style.backgroundColor = "rgba(0,0,0,0.04)")
-          }
-          onMouseLeave={(e) =>
-            (e.currentTarget.style.backgroundColor = "transparent")
-          }
+      <div style={{ padding: "8px 12px", borderTop: `1px solid ${theme.border}` }}>
+        <button onClick={onCreateRoot} style={{
+          width: "100%", padding: "6px 12px", border: "none", borderRadius: theme.radius,
+          backgroundColor: "transparent", cursor: "pointer", fontSize: theme.sidebarFontSize,
+          color: theme.textSecondary, textAlign: "left", display: "flex", alignItems: "center", gap: 6,
+          fontFamily: theme.fontFamily,
+        }}
+          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = theme.hoverBg)}
+          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
         >
           + New Page
         </button>

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { theme } from "../theme";
 
 export default function LoginPage() {
   const { login, register } = useAuth();
@@ -33,43 +34,35 @@ export default function LoginPage() {
   };
 
   return (
-    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: "#fafafa" }}>
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: theme.loginBg, fontFamily: theme.fontFamily }}>
       <form onSubmit={onSubmit} style={{
-        background: "#fff", padding: 32, borderRadius: 8,
-        boxShadow: "0 2px 8px rgba(0,0,0,0.1)", width: 320,
+        background: theme.contentBg, padding: 32, borderRadius: theme.cardRadius,
+        boxShadow: theme.shadow, width: 320,
       }}>
-        <h2 style={{ marginTop: 0, marginBottom: 24 }}>CollabDoc</h2>
-        {error && <div style={{ color: "#e53e3e", marginBottom: 12, fontSize: 14 }}>{error}</div>}
+        <h2 style={{ marginTop: 0, marginBottom: 24, color: theme.textPrimary }}>CollabDoc</h2>
+        {error && <div style={{ color: theme.error, marginBottom: 12, fontSize: theme.bodyFontSize }}>{error}</div>}
         <input
-          type="text"
-          placeholder="Username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          required
-          style={{ width: "100%", padding: 8, marginBottom: 12, borderRadius: 4, border: "1px solid #ddd", boxSizing: "border-box" }}
+          type="text" placeholder="Username" value={username}
+          onChange={(e) => setUsername(e.target.value)} required
+          style={{ width: "100%", padding: 8, marginBottom: 12, borderRadius: theme.radius, border: `1px solid ${theme.border}`, boxSizing: "border-box", fontSize: theme.bodyFontSize, fontFamily: theme.fontFamily }}
         />
         <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          minLength={4}
-          style={{ width: "100%", padding: 8, marginBottom: 16, borderRadius: 4, border: "1px solid #ddd", boxSizing: "border-box" }}
+          type="password" placeholder="Password" value={password}
+          onChange={(e) => setPassword(e.target.value)} required minLength={4}
+          style={{ width: "100%", padding: 8, marginBottom: 16, borderRadius: theme.radius, border: `1px solid ${theme.border}`, boxSizing: "border-box", fontSize: theme.bodyFontSize, fontFamily: theme.fontFamily }}
         />
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          style={{ width: "100%", padding: 10, background: "#2563eb", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", marginBottom: 8 }}
-        >
+        <button type="submit" disabled={isSubmitting} style={{
+          width: "100%", padding: 10, background: theme.primary, color: theme.primaryText,
+          border: "none", borderRadius: theme.btnRadius, cursor: "pointer", marginBottom: 8,
+          fontWeight: theme.btnWeight, fontSize: theme.bodyFontSize, fontFamily: theme.fontFamily,
+        }}>
           Log in
         </button>
-        <button
-          type="button"
-          disabled={isSubmitting}
-          onClick={() => handleSubmit("register")}
-          style={{ width: "100%", padding: 10, background: "#f3f4f6", color: "#333", border: "1px solid #ddd", borderRadius: 4, cursor: "pointer" }}
-        >
+        <button type="button" disabled={isSubmitting} onClick={() => handleSubmit("register")} style={{
+          width: "100%", padding: 10, background: "transparent", color: theme.primary,
+          border: `1px solid ${theme.primary}`, borderRadius: theme.btnRadius, cursor: "pointer",
+          fontWeight: theme.btnWeight, fontSize: theme.bodyFontSize, fontFamily: theme.fontFamily,
+        }}>
           Register
         </button>
       </form>

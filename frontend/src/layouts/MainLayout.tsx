@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Outlet, useNavigate, useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import { useAuth } from "../contexts/AuthContext";
+import { theme } from "../theme";
 import {
   fetchDocumentTree,
   createDocument,
@@ -138,14 +139,14 @@ export default function MainLayout() {
           onMove={handleMove}
           sharedDocuments={sharedDocs}
         />
-        <div style={{ padding: "8px 12px", borderTop: "1px solid #e5e5e5", fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ color: "#666" }}>{user?.username}</span>
-          <button onClick={logout} style={{ background: "none", border: "none", color: "#999", cursor: "pointer", fontSize: 13 }}>
+        <div style={{ padding: "8px 12px", borderTop: `1px solid ${theme.border}`, fontSize: theme.smallFontSize, display: "flex", justifyContent: "space-between", alignItems: "center", fontFamily: theme.fontFamily, backgroundColor: theme.sidebarBg }}>
+          <span style={{ color: theme.textPrimary }}>{user?.username}</span>
+          <button onClick={logout} style={{ background: "none", border: "none", color: theme.textSecondary, cursor: "pointer", fontSize: theme.smallFontSize }}>
             Log out
           </button>
         </div>
       </div>
-      <div style={{ flex: 1, overflow: "auto" }}>
+      <div style={{ flex: 1, overflow: "auto", backgroundColor: theme.contentBg }}>
         <Outlet context={{ tree, onRename: handleRename }} />
       </div>
     </div>

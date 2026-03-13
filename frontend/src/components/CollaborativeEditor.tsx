@@ -4,6 +4,7 @@ import { BlockNoteView } from "@blocknote/mantine";
 import { WebsocketProvider } from "y-websocket";
 import * as Y from "yjs";
 import { useCollaboration } from "../hooks/useCollaboration";
+import { theme } from "../theme";
 
 interface CollaborativeEditorProps {
   docId: string;
@@ -21,7 +22,7 @@ export default function CollaborativeEditor({
   const { provider, fragment, user, synced } = useCollaboration(docId, username, userId);
 
   if (!synced || !provider || !fragment) {
-    return <div style={{ padding: 24, color: "#888" }}>Connecting...</div>;
+    return <div style={{ padding: 24, color: theme.textSecondary }}>Connecting...</div>;
   }
 
   return (
@@ -50,6 +51,7 @@ function BlockNoteEditor({
 
   return (
     <div style={{ minHeight: "70vh" }}>
+      <style>{`.bn-container, .bn-editor, .ProseMirror { background: ${theme.contentBg} !important; }`}</style>
       <BlockNoteView editor={editor} editable={editable} theme="light" />
     </div>
   );
