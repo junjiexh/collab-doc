@@ -28,7 +28,10 @@ export const TreeItem = forwardRef<HTMLDivElement, TreeItemProps>(
         opacity: isDragging ? 0.5 : 1,
         userSelect: "none", fontSize: theme.sidebarFontSize,
         ...style,
-      }} {...props}>
+      }}
+        onMouseEnter={(e) => { if (!isActive && !isDragging) e.currentTarget.style.backgroundColor = theme.hoverBg; }}
+        onMouseLeave={(e) => { if (!isActive && !isDragging) e.currentTarget.style.backgroundColor = "transparent"; }}
+        {...props}>
         <span onClick={(e) => { e.stopPropagation(); if (hasChildren) onToggle(); }}
           style={{ width: 20, display: "inline-flex", justifyContent: "center", color: theme.textSecondary, flexShrink: 0 }}>
           {hasChildren ? (isExpanded ? theme.treeIconExpanded : theme.treeIconCollapsed) : ""}
